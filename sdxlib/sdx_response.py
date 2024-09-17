@@ -76,6 +76,7 @@ class SDXResponse:
                 self.current_path == other.current_path and
                 self.oxp_service_ids == other.oxp_service_ids)
 
+
     def __str__(self) -> str:
         """
         Returns a string representation of the L2VPNResponse object.
