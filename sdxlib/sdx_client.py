@@ -620,7 +620,6 @@ class SDXClient:
                 self._logger.info(f"L2VPN with service_id {service_id} was successfully updated.")
                 return SDXResponse({"description": "L2VPN Service Modified", "service_id": service_id})
 
-
         except HTTPError as e:
             status_code = e.response.status_code
             method_messages = {
