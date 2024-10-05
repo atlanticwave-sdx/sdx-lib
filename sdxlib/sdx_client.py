@@ -763,8 +763,13 @@ class SDXClient:
             #     oxp_service_ids=response_json.get("oxp_service_ids")
             # )
 
+            l2vpn_data = response_json.get(service_id)
+
+            if l2vpn_data is None:
+                raise SDXException(f"L2VPN with ID {service_id} not found.")
+
             # Directly pass all key-value pairs from response_json to SDXResponse
-            sdx_response = SDXResponse(response_json)
+            sdx_response = SDXResponse(l2vpn_data)
         
             return sdx_response            
             
