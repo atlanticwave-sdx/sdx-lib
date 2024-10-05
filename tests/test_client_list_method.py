@@ -5,7 +5,7 @@ from sdxlib.sdx_client import SDXClient
 from sdxlib.sdx_exception import SDXException
 from sdxlib.sdx_response import SDXResponse
 from requests.exceptions import HTTPError, Timeout, RequestException
-from test_config import TEST_URL, TEST_NAME, TEST_ENDPOINTS, TEST_SERVICE_ID
+from test_config import TEST_URL, TEST_NAME, TEST_ENDPOINTS, TEST_SERVICE_ID, MOCK_RESPONSE
 
 
 class TestSDXClient(unittest.TestCase):
@@ -179,16 +179,25 @@ class TestSDXClient(unittest.TestCase):
     @patch("requests.get")
     def test_get_l2vpn_valid_url_construction(self, mock_get):
         """Test valid URL construction for L2VPN retrieval."""
+        # Prepare the mock response to return the expected structure
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {}
+        mock_response.json.return_value = MOCK_RESPONSE
+        
         mock_get.return_value = mock_response
 
-        client = SDXClient(base_url=TEST_URL, name=TEST_NAME, endpoints=TEST_ENDPOINTS,)
+        client = SDXClient(base_url=TEST_URL, name=TEST_NAME, endpoints=TEST_ENDPOINTS)
 
-        client.get_l2vpn(TEST_SERVICE_ID)
+        # Call the get_l2vpn method
+        result = client.get_l2vpn(TEST_SERVICE_ID)
+
+        # Assert the URL was called correctly
         expected_url = f"{TEST_URL}/l2vpn/1.0/{TEST_SERVICE_ID}"
         mock_get.assert_called_with(expected_url, verify=True, timeout=120)
+
+        # Assert the result is as expected
+        self.assertEqual(result.service_id, TEST_SERVICE_ID)
+        self.assertEqual(result.name, "VLAN between AMPATH/300 and TENET/150")
 
     @patch("requests.get")
     @patch("logging.getLogger")
@@ -220,7 +229,6 @@ class TestSDXClient(unittest.TestCase):
         
         self.assertEqual(result, {service_id: SDXResponse(data) for service_id, data in mock_response.json.return_value.items()})
         # self.assertEqual(result, mock_response.json.return_value)
-
         mock_get_logger().info.assert_called_with(
             "Retrieved L2VPNs successfully: {'8344657b-2466-4735-9a21-143643073865': {'service_id': '8344657b-2466-4735-9a21-143643073865', 'ownership': 'user1', 'creation_date': '20240522T00:00:00Z', 'archived_date': '0', 'status': 'up', 'state': 'enabled', 'counters_location': 'https://my.aw-sdx.net/l2vpn/7cdf23e8978c', 'last_modified': '0', 'current_path': ['urn:sdx:link:tenet.ac.za:LinkToAmpath'], 'oxp_service_ids': {'ampath.net': ['c73da8e1'], 'Tenet.ac.za': ['5d034620']}}}"
         )

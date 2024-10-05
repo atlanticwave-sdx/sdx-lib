@@ -636,7 +636,6 @@ class SDXClient:
         scheduling: Optional[Dict[str, str]] = None,
         qos_metrics: Optional[Dict[str, Dict[str, Union[int, bool]]]] = None,
     ) -> SDXResponse:
-
         """Updates an existing L2VPN using the provided service ID and keyword arguments.
 
         Args:
@@ -693,7 +692,6 @@ class SDXClient:
             # No response body on success, so return a success message
             if response.status_code == 201:
                 self._logger.info(f"L2VPN with service_id {service_id} was successfully updated.")
-
                 return SDXResponse({"description": "L2VPN Service Modified", "service_id": service_id})
 
         except HTTPError as e:
@@ -747,29 +745,35 @@ class SDXClient:
             self._logger.info(f"L2VPN retrieval request sent to {url}.")
             
             # Populate the SDXResponse object with attributes from the response
-            sdx_response = SDXResponse(
-                service_id=response_json.get("service_id"),
-                name=response_json.get("name"),
-                endpoints=response_json.get("endpoints"),
-                description=response_json.get("description"),
-                notifications=response_json.get("notifications"),
-                qos_metrics=response_json.get("qos_metrics"),
-                ownership=response_json.get("ownership"),
-                creation_date=response_json.get("creation_date"),
-                archived_date=response_json.get("archived_date"),
-                status=response_json.get("status"),
-                state=response_json.get("state"),
-                counters_location=response_json.get("counters_location"),
-                last_modified=response_json.get("last_modified"),
-                current_path=response_json.get("current_path"),
-                oxp_service_ids=response_json.get("oxp_service_ids")
-            )
+            # sdx_response = SDXResponse(
+            #     service_id=response_json.get("service_id"),
+            #     name=response_json.get("name"),
+            #     endpoints=response_json.get("endpoints"),
+            #     description=response_json.get("description"),
+            #     notifications=response_json.get("notifications"),
+            #     qos_metrics=response_json.get("qos_metrics"),
+            #     ownership=response_json.get("ownership"),
+            #     creation_date=response_json.get("creation_date"),
+            #     archived_date=response_json.get("archived_date"),
+            #     status=response_json.get("status"),
+            #     state=response_json.get("state"),
+            #     counters_location=response_json.get("counters_location"),
+            #     last_modified=response_json.get("last_modified"),
+            #     current_path=response_json.get("current_path"),
+            #     oxp_service_ids=response_json.get("oxp_service_ids")
+            # )
+
+            l2vpn_data = response_json.get(service_id)
+
+            if l2vpn_data is None:
+                raise SDXException(f"L2VPN with ID {service_id} not found.")
+
+            # Directly pass all key-value pairs from response_json to SDXResponse
+            sdx_response = SDXResponse(l2vpn_data)
         
             return sdx_response            
             
             # return response.json()
-
-
         except HTTPError as e:
             status_code = e.response.status_code
             method_messages = {
