@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch, Mock
 from sdxlib.sdx_client import SDXClient
 from sdxlib.sdx_exception import SDXException
+from sdxlib.sdx_response import SDXResponse
 from test_config import TEST_URL, TEST_NAME, TEST_ENDPOINTS, TEST_SERVICE_ID
 
 
@@ -37,10 +38,10 @@ class TestSDXClient(unittest.TestCase):
             qos_metrics={"latency": {"value": 100, "priority": True}},
         )
 
-        expected_response = None   #{
-        #     "description": "L2VPN Service Modified",
-        #     "service_id": TEST_SERVICE_ID,
-        # }
+        expected_response = SDXResponse({
+            "description": "L2VPN Service Modified",
+            "service_id": TEST_SERVICE_ID,
+        })
 
         self.assertEqual(response, expected_response)
         mock_patch.assert_called_once()
