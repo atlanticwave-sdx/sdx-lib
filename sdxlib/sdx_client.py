@@ -445,7 +445,7 @@ class SDXClient:
         if "value" not in value_dict:
             raise ValueError(f"Missing required key 'value' in QoS metric for '{key}'")
         if not isinstance(value_dict["value"], int):
-            raise TypeError("QoS value for '{key}' must be an integer.")
+            raise TypeError(f"QoS value for '{key}' must be an integer.")
         if "strict" in value_dict and not isinstance(value_dict["strict"], bool):
             raise TypeError(f"'strict' in QoS metric of '{key}' must be a boolean.")
 
@@ -551,79 +551,6 @@ class SDXClient:
         except RequestException as e:
             self._logger.error(f"An error occurred while creating L2VPN: {e}")
             raise SDXException(message=f"An error occurred while creating L2VPN: {e}")
-## Potential update to the update_l2vpn method, needs to be evaluated against the spec
-
-    # def update_l2vpn(self, service_id: str, state: Optional[str] = None, name: Optional[str] = None,
-    #                  endpoints: Optional[List[Dict[str, str]]] = None, description: Optional[str] = None,
-    #                  notifications: Optional[List[Dict[str, str]]] = None,
-    #                  scheduling: Optional[Dict[str, str]] = None,
-    #                  qos_metrics: Optional[Dict[str, Dict[str, Union[int, bool]]]] = None) -> Dict:
-    #     """
-    #     Updates an existing L2VPN with new parameters.
-
-    #     Args:
-    #         service_id (str): The ID of the L2VPN to update.
-    #         state (Optional[str]): The new state of the L2VPN.
-    #         name (Optional[str]): The updated name for the L2VPN.
-    #         endpoints (Optional[List[Dict[str, str]]]): The updated endpoints for the L2VPN.
-    #         description (Optional[str]): The updated description of the L2VPN.
-    #         notifications (Optional[List[Dict[str, str]]]): The updated notifications configuration.
-    #         scheduling (Optional[Dict[str, str]]): The updated scheduling parameters.
-    #         qos_metrics (Optional[Dict[str, Dict[str, Union[int, bool]]]]): The updated QoS metrics.
-
-    #     Returns:
-    #         dict: Response from the SDX API after updating the L2VPN.
-
-    #     Raises:
-    #         SDXException: If the API request fails.
-    #     """
-    #     # Retrieve the existing L2VPN details first
-    #     current_l2vpn = self.get_l2vpn(service_id)
-        
-    #     # Create a payload with only the updated fields
-    #     payload = {}
-        
-    #     if state and state != current_l2vpn.state:
-    #         payload['state'] = state
-    #     if name and name != current_l2vpn.name:
-    #         payload['name'] = name
-    #     if endpoints and endpoints != current_l2vpn.endpoints:
-    #         payload['endpoints'] = endpoints
-    #     if description and description != current_l2vpn.description:
-    #         payload['description'] = description
-    #     if notifications and notifications != current_l2vpn.notifications:
-    #         payload['notifications'] = notifications
-    #     if scheduling and scheduling != current_l2vpn.scheduling:
-    #         payload['scheduling'] = scheduling
-    #     if qos_metrics and qos_metrics != current_l2vpn.qos_metrics:
-    #         payload['qos_metrics'] = qos_metrics
-
-    #     # Check if there's anything to update
-    #     if not payload:
-    #         self._logger.info(f"No changes detected for L2VPN with service_id: {service_id}.")
-    #         return {"description": "No changes made", "service_id": service_id}
-
-    #     # Send the update request
-    #     url = f"{self.base_url}/l2vpn/{self.VERSION}/{service_id}"
-    #     try:
-    #         response = requests.patch(url, json=payload, verify=True, timeout=120)
-    #         response.raise_for_status()
-    #         self._logger.info(f"L2VPN update request sent to {url}. Payload: {payload}")
-    #         return response.json()
-
-    #     except HTTPError as e:
-    #         status_code = e.response.status_code
-    #         error_message = f"Failed to update L2VPN with service_id {service_id}. Status code: {status_code}"
-    #         self._logger.error(error_message)
-    #         raise SDXException(status_code=status_code, message=error_message)
-
-    #     except Timeout:
-    #         self._logger.error(f"Update request for L2VPN with service_id {service_id} timed out.")
-    #         raise SDXException(f"Update request for L2VPN with service_id {service_id} timed out.")
-
-    #     except RequestException as e:
-    #         self._logger.error(f"Failed to update L2VPN with service_id {service_id}: {e}")
-    #         raise SDXException(f"Failed to update L2VPN with service_id {service_id}: {e}")
 
     def update_l2vpn(
         self,
@@ -680,19 +607,25 @@ class SDXClient:
         for attr, value in attributes.items():
             if value is not None:
                 payload[attr] = value
-    
+
         self._logger.debug(f"Sending request to update L2VPN with payload: {payload}")
 
         try:
             response = requests.patch(url, json=payload, verify=True, timeout=120)
             response.raise_for_status()
-            self._logger.info(f"L2VPN update request sent to {url}, with payload: {payload}.")
+            self._logger.info(
+                f"L2VPN update request sent to {url}, with payload: {payload}."
+            )
             # return response.json()
 
             # No response body on success, so return a success message
             if response.status_code == 201:
-                self._logger.info(f"L2VPN with service_id {service_id} was successfully updated.")
-                return SDXResponse({"description": "L2VPN Service Modified", "service_id": service_id})
+                self._logger.info(
+                    f"L2VPN with service_id {service_id} was successfully updated."
+                )
+                return SDXResponse(
+                    {"description": "L2VPN Service Modified", "service_id": service_id}
+                )
 
         except HTTPError as e:
             status_code = e.response.status_code
@@ -743,25 +676,6 @@ class SDXClient:
             response.raise_for_status()
             response_json = response.json()
             self._logger.info(f"L2VPN retrieval request sent to {url}.")
-            
-            # Populate the SDXResponse object with attributes from the response
-            # sdx_response = SDXResponse(
-            #     service_id=response_json.get("service_id"),
-            #     name=response_json.get("name"),
-            #     endpoints=response_json.get("endpoints"),
-            #     description=response_json.get("description"),
-            #     notifications=response_json.get("notifications"),
-            #     qos_metrics=response_json.get("qos_metrics"),
-            #     ownership=response_json.get("ownership"),
-            #     creation_date=response_json.get("creation_date"),
-            #     archived_date=response_json.get("archived_date"),
-            #     status=response_json.get("status"),
-            #     state=response_json.get("state"),
-            #     counters_location=response_json.get("counters_location"),
-            #     last_modified=response_json.get("last_modified"),
-            #     current_path=response_json.get("current_path"),
-            #     oxp_service_ids=response_json.get("oxp_service_ids")
-            # )
 
             l2vpn_data = response_json.get(service_id)
 
@@ -770,10 +684,9 @@ class SDXClient:
 
             # Directly pass all key-value pairs from response_json to SDXResponse
             sdx_response = SDXResponse(l2vpn_data)
-        
-            return sdx_response            
-            
-            # return response.json()
+
+            return sdx_response
+
         except HTTPError as e:
             status_code = e.response.status_code
             method_messages = {
@@ -837,7 +750,6 @@ class SDXClient:
 
             return l2vpns
 
-            # return response.json()
         except HTTPError as e:
             status_code = e.response.status_code
             method_messages = {
