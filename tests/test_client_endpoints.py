@@ -27,6 +27,11 @@ class TestSDXClient(unittest.TestCase):
     def setUp(self) -> None:
         self.client = create_client()
 
+    def test_validate_endpoints_none(self):
+        """Test that _validate_endpoints returns an empty list when endpoints is None."""
+        result = self.client._validate_endpoints(None)  # Call the method with None
+        self.assertEqual(result, [])
+
     def assert_invalid_endpoints(
         self, invalid_value, expected_message, exception=ValueError
     ):

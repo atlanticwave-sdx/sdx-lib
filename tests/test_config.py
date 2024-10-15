@@ -40,42 +40,30 @@ VLAN_UNTAGGED = {
 TEST_SERVICE_ID = "8344657b-2466-4735-9a21-143643073865"
 
 MOCK_RESPONSE = {
-            TEST_SERVICE_ID: {
-                "service_id": TEST_SERVICE_ID,
-                "name": "VLAN between AMPATH/300 and TENET/150",
-                "endpoints": [
-                    {"port_id": "urn:sdx:port:tenet.ac.za:Tenet03:50", "vlan": "150"},
-                    {"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "vlan": "300"}
-                ],
-                "description": "This is an example to demonstrate a L2VPN with optional attributes",
-                "qos_metrics": {
-                    "min_bw": {
-                        "value": 5,
-                        "strict": False
-                    },
-                    "max_delay": {
-                        "value": 150,
-                        "strict": True
-                    }
-                },
-                "notifications": [
-                    {"email": "user@domain.com"},
-                    {"email": "user2@domain2.com"}
-                ],
-                "ownership": "user1",
-                "creation_date": "20240522T00:00:00Z",
-                "archived_date": "0",
-                "status": "up",
-                "state": "enabled",
-                "counters_location": "https://my.aw-sdx.net/l2vpn/7cdf23e8978c",
-                "last_modified": "0",
-                "current_path": ["urn:sdx:link:tenet.ac.za:LinkToAmpath"],
-                "oxp_service_ids": {
-                    "ampath.net": ["c73da8e1"],
-                    "tenet.ac.za": ["5d034620"]
-                }
-            }
-        }
+    TEST_SERVICE_ID: {
+        "service_id": TEST_SERVICE_ID,
+        "name": "VLAN between AMPATH/300 and TENET/150",
+        "endpoints": [
+            {"port_id": "urn:sdx:port:tenet.ac.za:Tenet03:50", "vlan": "150"},
+            {"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "vlan": "300"},
+        ],
+        "description": "This is an example to demonstrate a L2VPN with optional attributes",
+        "qos_metrics": {
+            "min_bw": {"value": 5, "strict": False},
+            "max_delay": {"value": 150, "strict": True},
+        },
+        "notifications": [{"email": "user@domain.com"}, {"email": "user2@domain2.com"}],
+        "ownership": "user1",
+        "creation_date": "20240522T00:00:00Z",
+        "archived_date": "0",
+        "status": "up",
+        "state": "enabled",
+        "counters_location": "https://my.aw-sdx.net/l2vpn/7cdf23e8978c",
+        "last_modified": "0",
+        "current_path": ["urn:sdx:link:tenet.ac.za:LinkToAmpath"],
+        "oxp_service_ids": {"ampath.net": ["c73da8e1"], "tenet.ac.za": ["5d034620"]},
+    }
+}
 
 # Name error message.
 ERROR_NAME_INVALID = "Name must be a non-empty string with maximum 50 characters."

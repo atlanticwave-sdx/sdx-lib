@@ -21,6 +21,11 @@ class TestSDXClient(unittest.TestCase):
             self.client.notifications = invalid_value
         self.assertEqual(str(context.exception), expected_message)
 
+    def test_set_notifications_none(self):
+        """Test setting notifications to None."""
+        self.client.notifications = None  # Setting notifications to None
+        self.assertIsNone(self.client._notifications)
+
     # Unit Tests for Notifications Attribute(Optional) #
     def test_notifications_valid(self):
         """Test setting and getting valid notifications within the 10-email limit."""
@@ -74,6 +79,25 @@ class TestSDXClient(unittest.TestCase):
         self.assert_valid_notifications(
             exceeding_notifications, ERROR_NOTIFICATION_EXCEEDS_LIMIT
         )
+
+    def test_email_validation_non_string(self):
+        """Test with non-string inputs, expecting False."""
+        non_string_inputs = [None, 123, 45.67, [], {}, set(), object()]
+
+        for input_value in non_string_inputs:
+            self.assertFalse(SDXClient.is_valid_email(input_value))
+
+    def test_email_validation_empty_string(self):
+        """Test with an empty string input, expecting False."""
+        self.assertFalse(SDXClient.is_valid_email(""))
+
+    def test_email_validation_valid(self):
+        """Test with valid email format."""
+        self.assertTrue(SDXClient.is_valid_email("test@example.com"))
+
+    def test_email_validation_invalid_format(self):
+        """Test with an invalid email format (missing '@')."""
+        self.assertFalse(SDXClient.is_valid_email("invalid-email.com"))
 
 
 # Run the tests

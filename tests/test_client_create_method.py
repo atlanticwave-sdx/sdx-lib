@@ -4,10 +4,13 @@ import unittest
 from unittest.mock import patch, Mock
 from sdxlib.sdx_client import SDXClient
 from sdxlib.sdx_exception import SDXException
-from test_config import TEST_URL, TEST_NAME, TEST_ENDPOINTS
+from test_config import TEST_URL, TEST_NAME, TEST_ENDPOINTS, create_client
 
 
 class TestSDXClient(unittest.TestCase):
+    def setUp(self):
+        self.client = create_client()
+
     # # API Call Succeeds
     @patch("requests.post")
     @patch("logging.getLogger")
