@@ -485,6 +485,7 @@ class SDXClient:
         if not isinstance(self._endpoints, list):
             raise TypeError("Endpoints must be a list.")
         url = f"{self.base_url}/l2vpn/{self.VERSION}"
+        # print(url)
 
         # Old url that we are currently working under
         # url = f"{self.base_url}/SDX-Controller/1.0.0/connection"
@@ -523,7 +524,8 @@ class SDXClient:
             self._logger.info(
                 f"L2VPN created successfully with service_id: {response_json['service_id']}"
             )
-            return SDXResponse(response_json)
+            sdx_response = SDXResponse(response_json)
+            return {"service_id": response_json.get("service_id")}
         except HTTPError as e:
             status_code = e.response.status_code
             method_messages = {
@@ -682,10 +684,31 @@ class SDXClient:
             if l2vpn_data is None:
                 raise SDXException(f"L2VPN with ID {service_id} not found.")
 
-            # Directly pass all key-value pairs from response_json to SDXResponse
+            # Create SDXResponse object, store it, and unpack it for display
             sdx_response = SDXResponse(l2vpn_data)
+            self.last_sdx_response = (
+                sdx_response  # Save the SDXResponse for later access
+            )
 
-            return sdx_response
+            return {  # Unpack the SDXResponse object into the expected format for the user
+                service_id: {
+                    "service_id": sdx_response.service_id,
+                    "name": sdx_response.name,
+                    "endpoints": sdx_response.endpoints,
+                    "description": sdx_response.description,
+                    "qos_metrics": sdx_response.qos_metrics,
+                    "notifications": sdx_response.notifications,
+                    "ownership": sdx_response.ownership,
+                    "creation_date": sdx_response.creation_date,
+                    "archived_date": sdx_response.archived_date,
+                    "status": sdx_response.status,
+                    "state": sdx_response.state,
+                    "counters_location": sdx_response.counters_location,
+                    "last_modified": sdx_response.last_modified,
+                    "current_path": sdx_response.current_path,
+                    "oxp_service_ids": sdx_response.oxp_service_ids,
+                }
+            }
 
         except HTTPError as e:
             status_code = e.response.status_code
@@ -730,7 +753,7 @@ class SDXClient:
         if archived:
             url = f"{self.base_url}/l2vpn/{self.VERSION}/archived"
         else:
-            url = f"{self.base_url}/l2vpn/{self.VERSION}/"
+            url = f"{self.base_url}/l2vpn/{self.VERSION}"
 
         self._logger.info(f"Retrieving L2VPNs: URL={url}")
 
@@ -743,10 +766,37 @@ class SDXClient:
             self._logger.info(f"Retrieved L2VPNs successfully: {l2vpns_json}")
 
             # Map each L2VPN in the response JSON to an SDXResponse object
-            l2vpns = {
-                service_id: SDXResponse(l2vpn_data)
-                for service_id, l2vpn_data in l2vpns_json.items()
-            }
+            # l2vpns = {
+            #     service_id: SDXResponse(l2vpn_data)
+            #     for service_id, l2vpn_data in l2vpns_json.items()
+            # }
+
+            # return l2vpns
+            l2vpns = {}
+
+            # Map each L2VPN in the response JSON to an SDXResponse object, store it, and unpack it for display
+            for service_id, l2vpn_data in l2vpns_json.items():
+                sdx_response = SDXResponse(l2vpn_data)  # Store the response object
+                self.last_sdx_response = (
+                    sdx_response  # Save the SDXResponse for later access
+                )
+                l2vpns[service_id] = {
+                    "service_id": sdx_response.service_id,
+                    "name": sdx_response.name,
+                    "endpoints": sdx_response.endpoints,
+                    "description": sdx_response.description,
+                    "qos_metrics": sdx_response.qos_metrics,
+                    "notifications": sdx_response.notifications,
+                    "ownership": sdx_response.ownership,
+                    "creation_date": sdx_response.creation_date,
+                    "archived_date": sdx_response.archived_date,
+                    "status": sdx_response.status,
+                    "state": sdx_response.state,
+                    "counters_location": sdx_response.counters_location,
+                    "last_modified": sdx_response.last_modified,
+                    "current_path": sdx_response.current_path,
+                    "oxp_service_ids": sdx_response.oxp_service_ids,
+                }
 
             return l2vpns
 
