@@ -82,6 +82,11 @@ class SDXResponse:
         return (
             "L2VPN Response:\n"
             f"        service_id: {self.service_id}\n"
+            f"        name: {self.name}\n"
+            f"        endpoints: {self.endpoints}\n"
+            f"        description: {self.description}\n"
+            f"        qos_metrics: {self.qos_metrics}\n"
+            f"        notifications: {self.notifications}\n"
             f"        ownership: {self.ownership}\n"
             f"        creation_date: {self.creation_date}\n"
             f"        archived_date: {self.archived_date}\n"
