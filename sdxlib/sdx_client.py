@@ -8,6 +8,9 @@ from requests.exceptions import RequestException, HTTPError, Timeout
 from sdxlib.sdx_exception import SDXException
 from sdxlib.sdx_response import SDXResponse
 
+# Basic configuration for logging to stdout
+# logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
 """sdxlib
 
 A Python client library for interacting with the AtlanticWave-SDX L2VPN API.
@@ -528,6 +531,13 @@ class SDXClient:
             return {"service_id": response_json.get("service_id")}
         except HTTPError as e:
             status_code = e.response.status_code
+            error_details = None
+
+            try:
+                error_details = e.response.json().get("error", None)
+            except ValueError:
+                error_details = e.response.text
+                
             method_messages = {
                 201: "L2VPN Service Created",
                 400: "Request does not have a valid JSON or body is incomplete/incorrect",
@@ -546,6 +556,7 @@ class SDXClient:
                 status_code=status_code,
                 method_messages=method_messages,
                 message=error_message,
+                error_details=error_details,
             )
         except Timeout:
             self._logger.error("The request to create the L2VPN timed out.")
@@ -631,6 +642,13 @@ class SDXClient:
 
         except HTTPError as e:
             status_code = e.response.status_code
+            error_details = None
+
+            try:
+                error_details = e.response.json().get("error", None)
+            except ValueError:
+                error_details = e.response.text
+                
             method_messages = {
                 201: "L2VPN Service Modified",
                 400: "Request does not have a valid JSON or body is incomplete/incorrect",
@@ -649,6 +667,7 @@ class SDXClient:
                 status_code=status_code,
                 method_messages=method_messages,
                 message=error_message,
+                error_details=error_details,
             )
         except Timeout:
             self._logger.error("Request timed out.")
@@ -678,7 +697,7 @@ class SDXClient:
             response.raise_for_status()
             response_json = response.json()
             self._logger.info(f"L2VPN retrieval request sent to {url}.")
-
+            self._logger.info(f"Full response: {response_json}")
             l2vpn_data = response_json.get(service_id)
 
             if l2vpn_data is None:
@@ -686,9 +705,7 @@ class SDXClient:
 
             # Create SDXResponse object, store it, and unpack it for display
             sdx_response = SDXResponse(l2vpn_data)
-            self.last_sdx_response = (
-                sdx_response  # Save the SDXResponse for later access
-            )
+            self.last_sdx_response = sdx_response  # Save the SDXResponse for later access
 
             return {  # Unpack the SDXResponse object into the expected format for the user
                 service_id: {
@@ -712,19 +729,29 @@ class SDXClient:
 
         except HTTPError as e:
             status_code = e.response.status_code
+            error_details = None
+
+            try:
+                error_details = e.response.json().get("error", None)
+            except ValueError:
+                error_details = e.response.text
+                
             method_messages = {
                 200: "OK",
                 401: "Not Authorized",
                 404: "Service ID not found",
             }
+
             error_message = method_messages.get(status_code, "Unknown error occurred.")
             self._logger.error(
                 f"Failed to retrieve L2VPN. Status code: {status_code}: {error_message}"
             )
+
             raise SDXException(
                 status_code=status_code,
                 method_messages=method_messages,
                 message=error_message,
+                error_details=error_details,
             )
         except Timeout:
             self._logger.error("Request timed out.")
@@ -802,6 +829,13 @@ class SDXClient:
 
         except HTTPError as e:
             status_code = e.response.status_code
+            error_details = None
+
+            try:
+                error_details = e.response.json().get("error", None)
+            except ValueError:
+                error_details = e.response.text
+                
             method_messages = {
                 200: "OK",
             }
@@ -813,6 +847,7 @@ class SDXClient:
                 status_code=status_code,
                 method_messages=method_messages,
                 message=error_message,
+                error_details=error_details,
             )
         except Timeout:
             self._logger.error("Request timed out.")
@@ -841,32 +876,39 @@ class SDXClient:
             self._logger.info(f"L2VPN deletion request sent to {url}.")
             return response.json() if response.content else None
         except HTTPError as e:
-            if e.response is not None:
-                try:
-                    error_msg = e.response.json().get("description", "Unknown error")
-                except ValueError:
-                    error_msg = "Error response is not a valid JSON"
-                self._logger.error(
-                    f"Failed to delete L2VPN. Status code: {e.response.status_code}: {error_msg}"
-                )
-            else:
-                error_msg = "Unknown error occurred"
-                self._logger.error(f"Failed to delete L2VPN. {error_msg}")
-            raise SDXException(
-                status_code=e.response.status_code if e.response else 500,
-                message=error_msg,
-                method_messages={
+            status_code = e.response.status_code
+            error_details = None
+
+            try:
+                error_details = e.response.json().get("error", None)
+            except ValueError:
+                error_details = e.response.text
+                
+            method_messages = {
                     201: "L2VPN Deleted",
                     401: "Not Authorized",
                     404: "L2VPN Service ID provided does not exist",
-                },
+            }
+            
+            error_message = method_messages.get(status_code, "Unknown error occurred.")
+            self._logger.error(
+                f"Failed to retrieve L2VPN. Status code: {status_code}: {error_message}"
             )
+            
+            raise SDXException(
+                status_code=status_code,
+                method_messages=method_messages,
+                message=error_message,
+                error_details=error_details,
+            )
+    
         except Timeout:
             self._logger.error("Request timed out.")
             raise SDXException("The request to delete the L2VPN timed out.")
+    
         except RequestException as e:
             self._logger.error(f"Failed to delete L2VPN: {e}")
-            raise SDXException(f"Failed to delete L2VPN: {e}")
+            raise SDXException(message=f"Failed to delete L2VPN: {e}")
 
     # Utility Methods
     def __str__(self) -> str:
