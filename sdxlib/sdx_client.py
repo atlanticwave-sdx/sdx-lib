@@ -1,5 +1,6 @@
 from collections import namedtuple
 import logging
+import pandas as pd
 import re
 import requests
 from typing import Optional, List, Dict, Union
@@ -490,9 +491,6 @@ class SDXClient:
         url = f"{self.base_url}/l2vpn/{self.VERSION}"
         # print(url)
 
-        # Old url that we are currently working under
-        # url = f"{self.base_url}/SDX-Controller/1.0.0/connection"
-
         payload = {"name": self._name, "endpoints": self._endpoints}
 
         # Add optional attributes if provided.
@@ -537,7 +535,7 @@ class SDXClient:
                 error_details = e.response.json().get("error", None)
             except ValueError:
                 error_details = e.response.text
-                
+
             method_messages = {
                 201: "L2VPN Service Created",
                 400: "Request does not have a valid JSON or body is incomplete/incorrect",
@@ -629,7 +627,6 @@ class SDXClient:
             self._logger.info(
                 f"L2VPN update request sent to {url}, with payload: {payload}."
             )
-            # return response.json()
 
             # No response body on success, so return a success message
             if response.status_code == 201:
@@ -648,7 +645,7 @@ class SDXClient:
                 error_details = e.response.json().get("error", None)
             except ValueError:
                 error_details = e.response.text
-                
+
             method_messages = {
                 201: "L2VPN Service Modified",
                 400: "Request does not have a valid JSON or body is incomplete/incorrect",
@@ -676,20 +673,23 @@ class SDXClient:
             self._logger.error(f"Failed to update L2VPN: {e}")
             raise SDXException(f"Failed to update L2VPN: {e}")
 
-    def get_l2vpn(self, service_id: str) -> SDXResponse:
+    def get_l2vpn(
+        self, service_id: str, format: str = "dataframe"
+    ) -> Union[pd.DataFrame, SDXResponse]:
         """Retrieves details of an existing L2VPN using the provided service ID.
 
         Args:
             service_id (str): The ID of the L2VPN to retrieve.
+            format (str): The output format, either "dataframe" (default) or "json".
 
         Returns:
-            SDXResponse: Parsed response from the SDX API.
+            Parsed response from the SDX API in the form of the json formatted
+                SDXResponse or a DataFrame.
 
         Raises:
             SDXException: If the API request fails.
         """
-        # Old url that we are currently working under
-        # url = f"{self.base_url}/SDX-Controller/1.0.0/connection/{service_id}"
+
         url = f"{self.base_url}/l2vpn/{self.VERSION}/{service_id}"
 
         try:
@@ -705,27 +705,48 @@ class SDXClient:
 
             # Create SDXResponse object, store it, and unpack it for display
             sdx_response = SDXResponse(l2vpn_data)
-            self.last_sdx_response = sdx_response  # Save the SDXResponse for later access
+            self.last_sdx_response = sdx_response
 
-            return {  # Unpack the SDXResponse object into the expected format for the user
-                service_id: {
-                    "service_id": sdx_response.service_id,
-                    "name": sdx_response.name,
-                    "endpoints": sdx_response.endpoints,
-                    "description": sdx_response.description,
-                    "qos_metrics": sdx_response.qos_metrics,
-                    "notifications": sdx_response.notifications,
-                    "ownership": sdx_response.ownership,
-                    "creation_date": sdx_response.creation_date,
-                    "archived_date": sdx_response.archived_date,
-                    "status": sdx_response.status,
-                    "state": sdx_response.state,
-                    "counters_location": sdx_response.counters_location,
-                    "last_modified": sdx_response.last_modified,
-                    "current_path": sdx_response.current_path,
-                    "oxp_service_ids": sdx_response.oxp_service_ids,
-                }
-            }
+            # Format as DataFrame if requested
+            if format == "dataframe":
+                # Flatten the endpoints for each row in the DataFrame
+                node_info_list = [
+                    {
+                        **vars(
+                            sdx_response
+                        ),  # Convert SDXResponse attributes to dictionary
+                        "port_id": endpoint.get("port_id"),
+                        "vlan": endpoint.get("vlan"),
+                    }
+                    for endpoint in sdx_response.endpoints
+                ]
+
+                ordered_columns = [
+                    "service_id",
+                    "name",
+                    "port_id",
+                    "vlan",
+                    "description",
+                    "qos_metrics",
+                    "notifications",
+                    "ownership",
+                    "creation_date",
+                    "archived_date",
+                    "status",
+                    "state",
+                    "counters_location",
+                    "last_modified",
+                    "current_path",
+                ]
+
+                df = pd.DataFrame(node_info_list)
+                return df[ordered_columns] if not df.empty else df
+
+            elif format == "json":
+                return vars(sdx_response)
+
+            else:
+                raise ValueError("Invalid format specified. Use 'dataframe' or 'json'.")
 
         except HTTPError as e:
             status_code = e.response.status_code
@@ -735,7 +756,7 @@ class SDXClient:
                 error_details = e.response.json().get("error", None)
             except ValueError:
                 error_details = e.response.text
-                
+
             method_messages = {
                 200: "OK",
                 401: "Not Authorized",
@@ -760,22 +781,23 @@ class SDXClient:
             logging.error(f"Failed to retrieve L2VPN: {e}")
             raise SDXException(f"Failed to retrieve L2VPN: {e}")
 
-    def get_all_l2vpns(self, archived: bool = False) -> Dict[str, SDXResponse]:
+    def get_all_l2vpns(
+        self, archived: bool = False, format: str = "dataframe"
+    ) -> Union[pd.DataFrame, Dict[str, SDXResponse]]:
         """
         Retrieves all L2VPNs, either archived or active.
 
         Args:
             archived(bool): If True, retrieve only archived L2VPNs. If False, retrieve only active L2VPNS.
+            format (str): The output format, either "dataframe" (default) or "json".
 
         Returns:
-            dict: A dictionary with L2VPNs with service_ids as keys. If no L2VPNs, the dictionary will be empty.
+            All l2vpns in the form of a dataframe or json dictionary.
 
         Raises:
             SDXException: If the API request fails with a known error code and description.
             ValueError: If an invalid parameters are provided.
         """
-        # Old url that we are currently working under
-        # url = f"{self.base_url}/SDX-Controller/1.0.0/connections"
 
         if archived:
             url = f"{self.base_url}/l2vpn/{self.VERSION}/archived"
@@ -792,40 +814,31 @@ class SDXClient:
             self._logger.info(f"L2VPN retrieval request sent to {url}.")
             self._logger.info(f"Retrieved L2VPNs successfully: {l2vpns_json}")
 
-            # Map each L2VPN in the response JSON to an SDXResponse object
-            # l2vpns = {
-            #     service_id: SDXResponse(l2vpn_data)
-            #     for service_id, l2vpn_data in l2vpns_json.items()
-            # }
+            # Parse each L2VPN JSON into SDXResponse objects
+            l2vpns = {
+                service_id: SDXResponse(l2vpn_data)
+                for service_id, l2vpn_data in l2vpns_json.items()
+            }
 
-            # return l2vpns
-            l2vpns = {}
-
-            # Map each L2VPN in the response JSON to an SDXResponse object, store it, and unpack it for display
-            for service_id, l2vpn_data in l2vpns_json.items():
-                sdx_response = SDXResponse(l2vpn_data)  # Store the response object
-                self.last_sdx_response = (
-                    sdx_response  # Save the SDXResponse for later access
-                )
-                l2vpns[service_id] = {
-                    "service_id": sdx_response.service_id,
-                    "name": sdx_response.name,
-                    "endpoints": sdx_response.endpoints,
-                    "description": sdx_response.description,
-                    "qos_metrics": sdx_response.qos_metrics,
-                    "notifications": sdx_response.notifications,
-                    "ownership": sdx_response.ownership,
-                    "creation_date": sdx_response.creation_date,
-                    "archived_date": sdx_response.archived_date,
-                    "status": sdx_response.status,
-                    "state": sdx_response.state,
-                    "counters_location": sdx_response.counters_location,
-                    "last_modified": sdx_response.last_modified,
-                    "current_path": sdx_response.current_path,
-                    "oxp_service_ids": sdx_response.oxp_service_ids,
+            # Format data for DataFrame if requested
+            if format == "dataframe":
+                node_info_list = [
+                    {
+                        "service_id": service_id,
+                        **vars(
+                            sdx_response
+                        ),  # Convert SDXResponse attributes to dictionary
+                    }
+                    for service_id, sdx_response in l2vpns.items()
+                ]
+                return pd.DataFrame(node_info_list)
+            elif format == "json":
+                return {
+                    service_id: vars(sdx_response)
+                    for service_id, sdx_response in l2vpns.items()
                 }
-
-            return l2vpns
+            else:
+                raise ValueError("Invalid format specified. Use 'dataframe' or 'json'.")
 
         except HTTPError as e:
             status_code = e.response.status_code
@@ -835,7 +848,7 @@ class SDXClient:
                 error_details = e.response.json().get("error", None)
             except ValueError:
                 error_details = e.response.text
-                
+
             method_messages = {
                 200: "OK",
             }
@@ -883,32 +896,104 @@ class SDXClient:
                 error_details = e.response.json().get("error", None)
             except ValueError:
                 error_details = e.response.text
-                
+
             method_messages = {
-                    201: "L2VPN Deleted",
-                    401: "Not Authorized",
-                    404: "L2VPN Service ID provided does not exist",
+                201: "L2VPN Deleted",
+                401: "Not Authorized",
+                404: "L2VPN Service ID provided does not exist",
             }
-            
+
             error_message = method_messages.get(status_code, "Unknown error occurred.")
             self._logger.error(
                 f"Failed to retrieve L2VPN. Status code: {status_code}: {error_message}"
             )
-            
+
             raise SDXException(
                 status_code=status_code,
                 method_messages=method_messages,
                 message=error_message,
                 error_details=error_details,
             )
-    
+
         except Timeout:
             self._logger.error("Request timed out.")
             raise SDXException("The request to delete the L2VPN timed out.")
-    
+
         except RequestException as e:
             self._logger.error(f"Failed to delete L2VPN: {e}")
             raise SDXException(message=f"Failed to delete L2VPN: {e}")
+
+    def get_available_ports(
+        self, format: str = "dataframe"
+    ) -> Union[pd.DataFrame, List[Dict[str, str]]]:
+        """Fetches and returns a list of available ports from the SDX topology.
+
+        Args:
+            format (str): The output format, either "dataframe" (default) or "json".
+
+        Returns:
+            Union[pd.DataFrame, List[Dict[str, str]]]: The available ports in the specified format.
+
+        Raises:
+            SDXException: If the API request fails or returns an error.
+        """
+        topology_url = f"{self._base_url}/topology"
+
+        try:
+            response = requests.get(topology_url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
+            # Extract available ports
+            port_list = []
+            for node in data.get("nodes", []):
+                for port in node.get("ports", []):
+                    if port.get("status") == "up" and not port.get("nni"):
+                        port_list.append(
+                            {"Port ID": port.get("id"), "Status": port.get("status")}
+                        )
+
+            # Return in the requested format
+            if format == "dataframe":
+                df = pd.DataFrame(port_list, index=None)
+                return df.style.hide(axis="index")
+            elif format == "json":
+                return port_list
+            else:
+                raise ValueError("Invalid format specified. Use 'dataframe' or 'json'.")
+
+        except HTTPError as e:
+            status_code = e.response.status_code
+            error_details = None
+
+            try:
+                error_details = e.response.json().get("error", None)
+            except ValueError:
+                error_details = e.response.text
+
+            method_messages = {
+                400: "Request does not have a valid JSON or body is incomplete/incorrect",
+                401: "Not Authorized",
+                404: "Topology endpoint not found",
+            }
+            error_message = method_messages.get(status_code, "Unknown error occurred.")
+            self._logger.error(
+                f"Failed to retrieve available ports. Status code: {status_code}: {error_message}"
+            )
+            raise SDXException(
+                status_code=status_code,
+                method_messages=method_messages,
+                message=error_message,
+                error_details=error_details,
+            )
+
+        except Timeout:
+            self._logger.error("The request to retrieve available ports timed out.")
+            raise SDXException("The request to retrieve available ports timed out.")
+
+        except RequestException as e:
+            self._logger.error(f"Failed to retrieve available ports: {e}")
+            raise SDXException(f"Failed to retrieve available ports: {e}")
 
     # Utility Methods
     def __str__(self) -> str:

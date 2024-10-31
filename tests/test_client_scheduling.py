@@ -4,7 +4,6 @@ from test_config import (
     create_client,
     ERROR_SCHEDULING_FORMAT,
     ERROR_SCHEDULING_END_BEFORE_START,
-    ERROR_SCHEDULING_NOT_DICT,
 )
 
 

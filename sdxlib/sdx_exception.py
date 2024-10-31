@@ -10,7 +10,9 @@ class SDXException(Exception):
         error_details (str): Additional error details from the API response.
     """
 
-    def __init__(self, status_code=None, method_messages=None, message=None, error_details=None):
+    def __init__(
+        self, status_code=None, method_messages=None, message=None, error_details=None
+    ):
         """Initializes an SDXException with status code, message, and optional error details.
 
         Args:
@@ -26,7 +28,9 @@ class SDXException(Exception):
         self.error_details = error_details or ""
 
         # Get a meaningful message based on the status code and method messages
-        self.message = message or self.method_messages.get(status_code, "Unknown error occurred.")
+        self.message = message or self.method_messages.get(
+            status_code, "Unknown error occurred."
+        )
 
         # Include additional error details, if available
         if self.error_details:
