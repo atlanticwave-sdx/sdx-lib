@@ -35,6 +35,7 @@ class SDXResponse:
         self.notifications: Optional[List[Dict[str, str]]] = response_json.get(
             "notifications"
         )
+        self.scheduling: Optional[Dict[str, str]] = response_json.get("scheduling")
         self.qos_metrics: Optional[
             Dict[str, Dict[str, Union[int, bool]]]
         ] = response_json.get("qos_metrics")
@@ -85,6 +86,7 @@ class SDXResponse:
             f"        name: {self.name}\n"
             f"        endpoints: {self.endpoints}\n"
             f"        description: {self.description}\n"
+            f"        scheduling: {self.scheduling}\n"
             f"        qos_metrics: {self.qos_metrics}\n"
             f"        notifications: {self.notifications}\n"
             f"        ownership: {self.ownership}\n"
