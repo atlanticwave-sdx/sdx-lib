@@ -548,11 +548,7 @@ class SDXClient:
 
         try:
             # Include authentication if username and password are provided.
-            auth = (
-                (self._http_username, self._http_password)
-                if self._http_username and self._http_password
-                else None
-            )
+            auth = (self._http_username, self._http_password)
             response = requests.post(url, json=payload, auth=auth, timeout=120)
             response.raise_for_status()
             response_json = response.json()
@@ -658,12 +654,7 @@ class SDXClient:
         self._logger.debug(f"Sending request to update L2VPN with payload: {payload}")
 
         try:
-
-            auth = (
-                (self._http_username, self._http_password)
-                if self._http_username and self._http_password
-                else None
-            )
+            auth = (self._http_username, self._http_password)
             response = requests.patch(
                 url, json=payload, auth=auth, verify=True, timeout=120
             )
@@ -737,11 +728,7 @@ class SDXClient:
         url = f"{self.base_url}/l2vpn/{self.VERSION}/{service_id}"
 
         try:
-            auth = (
-                (self._http_username, self._http_password)
-                if self._http_username and self._http_password
-                else None
-            )
+            auth = (self._http_username, self._http_password)
             response = requests.get(url, auth=auth, verify=True, timeout=120)
             response.raise_for_status()
             response_json = response.json()
@@ -856,11 +843,7 @@ class SDXClient:
         self._logger.info(f"Retrieving L2VPNs: URL={url}")
 
         try:
-            auth = (
-                (self._http_username, self._http_password)
-                if self._http_username and self._http_password
-                else None
-            )
+            auth = (self._http_username, self._http_password)
             response = requests.get(url, auth=auth, verify=True, timeout=120)
             response.raise_for_status()
 
@@ -938,11 +921,7 @@ class SDXClient:
         url = f"{self.base_url}/l2vpn/{self.VERSION}/{service_id}"
 
         try:
-            auth = (
-                (self._http_username, self._http_password)
-                if self._http_username and self._http_password
-                else None
-            )
+            auth = (self._http_username, self._http_password)
             response = requests.delete(url, auth=auth, verify=True, timeout=120)
             response.raise_for_status()
             self._logger.info(f"L2VPN deletion request sent to {url}.")
@@ -999,7 +978,8 @@ class SDXClient:
         topology_url = f"{self._base_url}/topology"
 
         try:
-            response = requests.get(topology_url, timeout=10)
+            auth = (self._http_username, self._http_password)
+            response = requests.get(topology_url, auth=auth, timeout=10)
             response.raise_for_status()
             data = response.json()
 
