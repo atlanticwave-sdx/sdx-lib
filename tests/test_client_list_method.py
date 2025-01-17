@@ -195,7 +195,7 @@ class TestSDXClient(unittest.TestCase):
 
         # Assert the URL was called correctly
         expected_url = f"{TEST_URL}/l2vpn/1.0/{TEST_SERVICE_ID}"
-        mock_get.assert_called_with(expected_url, auth=None, verify=True, timeout=120)
+        mock_get.assert_called_with(expected_url, auth=(None,None), verify=True, timeout=120)
 
         # Assert the result is as expected
         self.assertEqual(result.service_id, TEST_SERVICE_ID)
