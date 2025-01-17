@@ -28,7 +28,7 @@ class TestSDXClient(unittest.TestCase):
         self.assertIsNone(result)
         mock_delete.assert_called_with(
             f"{TEST_URL}/l2vpn/1.0/{TEST_SERVICE_ID}",
-            auth=None,
+            auth=(None,None),
             verify=True,
             timeout=120,
         )
