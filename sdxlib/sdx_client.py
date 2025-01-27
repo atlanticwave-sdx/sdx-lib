@@ -60,13 +60,13 @@ class SDXClient:
         - scheduling (Optional[Dict[str, str]]): Scheduling configuration (default: None).
         - qos_metrics (Optional[Dict[str, str]]): Quality of service metrics (default: None).
         """
-        self._base_url = base_url
-        self._name = name
-        self._endpoints = endpoints
-        self._description = description
-        self._notifications = notifications
-        self._scheduling = scheduling
-        self._qos_metrics = qos_metrics
+        self.base_url = base_url
+        self.name = name
+        self.endpoints = endpoints
+        self.description = description
+        self.notifications = notifications
+        self.scheduling = scheduling
+        self.qos_metrics = qos_metrics
         self._logger = logger or logging.getLogger(__name__)
         self._request_cache = {}
 
