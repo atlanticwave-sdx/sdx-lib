@@ -64,15 +64,16 @@ class SDXClient:
         - scheduling (Optional[Dict[str, str]]): Scheduling configuration (default: None).
         - qos_metrics (Optional[Dict[str, str]]): Quality of service metrics (default: None).
         """
-        self._base_url = base_url
-        self._http_username = http_username
-        self._http_password = http_password
-        self._name = name
-        self._endpoints = endpoints
-        self._description = description
-        self._notifications = self._validate_notifications(notifications)
-        self._scheduling = scheduling
-        self._qos_metrics = qos_metrics
+        
+        self.base_url = base_url
+        self.http_username = http_username
+        self.http_password = http_password
+        self.name = name
+        self.endpoints = endpoints
+        self.description = description
+        self.notifications = notifications
+        self.scheduling = scheduling
+        self.qos_metrics = qos_metrics
         self._logger = logger or logging.getLogger(__name__)
         self._request_cache = {}
 
@@ -512,33 +513,33 @@ class SDXClient:
             SDXException: If the L2VPN creation fails.
             ValueError: If required attributes are missing.
         """
-        if not self._base_url or not self._name or not self._endpoints:
+        if not self.base_url or not self.name or not self.endpoints:
             raise ValueError(
                 "Creating L2VPN requires the base URL, name, and endpoints at minumum."
             )
-        if not isinstance(self._endpoints, list):
+        if not isinstance(self.endpoints, list):
             raise TypeError("Endpoints must be a list.")
         url = f"{self.base_url}/l2vpn/{self.VERSION}"
         # print(url)
 
-        payload = {"name": self._name, "endpoints": self._endpoints}
+        payload = {"name": self.name, "endpoints": self.endpoints}
 
         # Add optional attributes if provided.
-        if self._description:
-            payload["description"] = self._description
-        if self._notifications:
-            payload["notifications"] = self._notifications
-        if self._scheduling:
-            payload["scheduling"] = self._scheduling
-        if self._qos_metrics:
-            payload["qos_metrics"] = self._qos_metrics
+        if self.description:
+            payload["description"] = self.description
+        if self.notifications:
+            payload["notifications"] = self.notifications
+        if self.scheduling:
+            payload["scheduling"] = self.scheduling
+        if self.qos_metrics:
+            payload["qos_metrics"] = self.qos_metrics
 
         self._logger.debug("Sending request to create L2VPN with payload: %s", payload)
 
         # Check cache for existing request with same name and endpoints
         cache_key = (
-            self._name,
-            tuple(endpoint["port_id"] for endpoint in self._endpoints),
+            self.name,
+            tuple(endpoint["port_id"] for endpoint in self.endpoints),
         )
         cached_data = self._request_cache.get(cache_key)
 
@@ -975,7 +976,7 @@ class SDXClient:
         Raises:
             SDXException: If the API request fails or returns an error.
         """
-        topology_url = f"{self._base_url}/topology"
+        topology_url = f"{self.base_url}/topology"
 
         try:
             auth = (self.http_username, self.http_password)
