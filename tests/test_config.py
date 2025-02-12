@@ -1,6 +1,8 @@
 from sdxlib.sdx_client import SDXClient
 
 TEST_URL = "http://aw-sdx-controller.renci.org:8081"
+TEST_USERNAME = "testuser"
+TEST_PASSWORD = "testpassword"
 TEST_NAME = "Test L2VPN"
 TEST_ENDPOINTS = [
     {
@@ -116,5 +118,17 @@ def create_client(
     notifications=None,
     scheduling=None,
     qos_metrics=None,
+    http_username=None,
+    http_password=None,
 ):
-    return SDXClient(base_url=TEST_URL, name=TEST_NAME, endpoints=TEST_ENDPOINTS)
+    return SDXClient(
+        base_url=base_url,
+        name=name,
+        endpoints=endpoints,
+        description=description,
+        notifications=notifications,
+        scheduling=scheduling,
+        qos_metrics=qos_metrics,
+        http_username=http_username,
+        http_password=http_password,
+    )
