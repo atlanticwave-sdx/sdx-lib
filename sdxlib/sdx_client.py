@@ -41,6 +41,8 @@ class SDXClient:
     def __init__(
         self,
         base_url: Optional[str] = None,
+        http_username=None,
+        http_password=None,
         name: Optional[str] = None,
         endpoints: Optional[List[Dict[str, str]]] = None,
         description: Optional[str] = None,
@@ -53,6 +55,8 @@ class SDXClient:
 
         Args:
         - base_url (Optional[str]): The base URL of the SDX API.
+        - http_username (Optional[str]): The HTTP basic authentication username.
+        - http_password (Optional[str]): The HTTP basic authentication password.
         - name (Optional[str]): The name of the SDX client.
         - endpoints (Optional[List[Dict[str, str]]]): List  of dictionaries with 'port_id' and 'vlan' keys for each endpoint.
         - description (Optional[str]): Description of the client (default: None).
@@ -60,7 +64,10 @@ class SDXClient:
         - scheduling (Optional[Dict[str, str]]): Scheduling configuration (default: None).
         - qos_metrics (Optional[Dict[str, str]]): Quality of service metrics (default: None).
         """
+        
         self.base_url = base_url
+        self.http_username = http_username
+        self.http_password = http_password
         self.name = name
         self.endpoints = endpoints
         self.description = description
@@ -81,6 +88,30 @@ class SDXClient:
         if not isinstance(value, str) or not value.strip():
             raise ValueError("Base URL must be a non-empty string.")
         self._base_url = value
+
+    @property
+    def http_username(self) -> Optional[str]:
+        """Getter for http_username attribute."""
+        return self._http_username
+
+    @http_username.setter
+    def http_username(self, value: Optional[str]):
+        """Setter for http_username attribute."""
+        if value is not None and not isinstance(value, str):
+            raise ValueError("HTTP username must be a string or None.")
+        self._http_username = value
+
+    @property
+    def http_password(self) -> Optional[str]:
+        """Getter for http_password attribute."""
+        return self._http_password
+
+    @http_password.setter
+    def http_password(self, value: Optional[str]):
+        """Setter for http_password attribute."""
+        if value is not None and not isinstance(value, str):
+            raise ValueError("HTTP password must be a string or None.")
+        self._http_password = value
 
     @property
     def name(self) -> Optional[str]:
@@ -517,7 +548,9 @@ class SDXClient:
             return SDXResponse(response_json)
 
         try:
-            response = requests.post(url, json=payload, timeout=120)
+            # Include authentication if username and password are provided.
+            auth = (self.http_username, self.http_password)
+            response = requests.post(url, json=payload, auth=auth, timeout=120)
             response.raise_for_status()
             response_json = response.json()
             cached_data = (payload, response_json)
@@ -622,7 +655,10 @@ class SDXClient:
         self._logger.debug(f"Sending request to update L2VPN with payload: {payload}")
 
         try:
-            response = requests.patch(url, json=payload, verify=True, timeout=120)
+            auth = (self.http_username, self.http_password)
+            response = requests.patch(
+                url, json=payload, auth=auth, verify=True, timeout=120
+            )
             response.raise_for_status()
             self._logger.info(
                 f"L2VPN update request sent to {url}, with payload: {payload}."
@@ -693,7 +729,8 @@ class SDXClient:
         url = f"{self.base_url}/l2vpn/{self.VERSION}/{service_id}"
 
         try:
-            response = requests.get(url, verify=True, timeout=120)
+            auth = (self.http_username, self.http_password)
+            response = requests.get(url, auth=auth, verify=True, timeout=120)
             response.raise_for_status()
             response_json = response.json()
             self._logger.info(f"L2VPN retrieval request sent to {url}.")
@@ -807,7 +844,8 @@ class SDXClient:
         self._logger.info(f"Retrieving L2VPNs: URL={url}")
 
         try:
-            response = requests.get(url, verify=True, timeout=120)
+            auth = (self.http_username, self.http_password)
+            response = requests.get(url, auth=auth, verify=True, timeout=120)
             response.raise_for_status()
 
             l2vpns_json = response.json()
@@ -864,7 +902,7 @@ class SDXClient:
             )
         except Timeout:
             self._logger.error("Request timed out.")
-            raise SDXException("The request to create the L2VPN timed out.")
+            raise SDXException("The request to retrieve L2VPN(s) timed out.")
         except RequestException as e:
             self._logger.error(f"Failed to retrieve L2VPN(s): {e}")
             raise SDXException(f"Failed to retrieve L2VPN(s): {e}")
@@ -884,7 +922,8 @@ class SDXClient:
         url = f"{self.base_url}/l2vpn/{self.VERSION}/{service_id}"
 
         try:
-            response = requests.delete(url, verify=True, timeout=120)
+            auth = (self.http_username, self.http_password)
+            response = requests.delete(url, auth=auth, verify=True, timeout=120)
             response.raise_for_status()
             self._logger.info(f"L2VPN deletion request sent to {url}.")
             return response.json() if response.content else None
@@ -940,7 +979,8 @@ class SDXClient:
         topology_url = f"{self.base_url}/topology"
 
         try:
-            response = requests.get(topology_url, timeout=10)
+            auth = (self.http_username, self.http_password)
+            response = requests.get(topology_url, auth=auth, timeout=10)
             response.raise_for_status()
             data = response.json()
 

@@ -27,7 +27,10 @@ class TestSDXClient(unittest.TestCase):
         result = client.delete_l2vpn(TEST_SERVICE_ID)
         self.assertIsNone(result)
         mock_delete.assert_called_with(
-            f"{TEST_URL}/l2vpn/1.0/{TEST_SERVICE_ID}", verify=True, timeout=120
+            f"{TEST_URL}/l2vpn/1.0/{TEST_SERVICE_ID}",
+            auth=(None,None),
+            verify=True,
+            timeout=120,
         )
 
     # Unauthorized error (401)
