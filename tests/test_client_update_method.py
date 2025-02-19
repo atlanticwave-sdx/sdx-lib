@@ -259,7 +259,7 @@ class TestSDXClient(unittest.TestCase):
         mock_patch.assert_called_once_with(
             f"{TEST_URL}/l2vpn/1.0/{TEST_SERVICE_ID}",
             json=expected_payload,
-            auth=(None,None),
+            auth=(None, None),
             verify=True,
             timeout=120,
         )
