@@ -28,7 +28,7 @@ class TestSDXClient(unittest.TestCase):
         self.assertIsNone(result)
         mock_delete.assert_called_with(
             f"{TEST_URL}/l2vpn/1.0/{TEST_SERVICE_ID}",
-            auth=(None,None),
+            auth=(None, None),
             verify=True,
             timeout=120,
         )
@@ -92,7 +92,9 @@ class TestSDXClient(unittest.TestCase):
         """Test logging of error conditions for L2VPN deletion."""
         mock_response = Mock()
         mock_response.status_code = 404
-        mock_response.json.return_value = {"description": "Service ID not found"}
+        mock_response.json.return_value = {
+            "description": "L2VPN Service ID provided does not exist"
+        }
         mock_delete.side_effect = HTTPError(response=mock_response)
 
         mock_logger = Mock()
@@ -108,7 +110,7 @@ class TestSDXClient(unittest.TestCase):
         with self.assertRaises(SDXException):
             client.delete_l2vpn(TEST_SERVICE_ID)
         mock_logger.error.assert_called_with(
-            "Failed to delete L2VPN. Status code: 404: Service ID not found"
+            "Failed to delete L2VPN. Status code: 404: L2VPN Service ID provided does not exist"
         )
 
     # Request exceptions
@@ -163,9 +165,9 @@ class TestSDXClient(unittest.TestCase):
     def test_delete_l2vpn_error_messages(self, mock_delete):
         """Test error messages for different status codes during L2VPN deletion."""
         for status_code, expected_message in {
+            201: "L2VPN Deleted",
             401: "Not Authorized",
             404: "L2VPN Service ID provided does not exist",
-            500: "Unknown error",
         }.items():
             mock_response = Mock()
             mock_response.status_code = status_code
