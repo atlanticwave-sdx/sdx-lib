@@ -64,6 +64,7 @@ MOCK_RESPONSE = {
         "last_modified": "0",
         "current_path": ["urn:sdx:link:tenet.ac.za:LinkToAmpath"],
         "oxp_service_ids": {"ampath.net": ["c73da8e1"], "tenet.ac.za": ["5d034620"]},
+        "scheduling": None,
     }
 }
 
