@@ -1,10 +1,11 @@
-import requests
+# import requests
 from requests.exceptions import HTTPError, Timeout, RequestException
 import unittest
 from unittest.mock import patch, Mock
 from sdxlib.sdx_client import SDXClient
 from sdxlib.sdx_exception import SDXException
-from sdxlib.sdx_response import SDXResponse
+
+# from sdxlib.sdx_response import SDXResponse
 from test_config import TEST_URL, TEST_NAME, TEST_ENDPOINTS, TEST_SERVICE_ID
 
 
@@ -17,33 +18,29 @@ class TestSDXClient(unittest.TestCase):
     def test_successful_l2vpn_update(self, mock_patch):
         """Test that a valid update request is successful."""
         mock_response = Mock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {
+        mock_response.status_code = 201  # Simulate a successful update
+        mock_patch.return_value = mock_response  # Patch the request call
+
+        client = SDXClient(base_url=TEST_URL)
+
+        # Call update_l2vpn and capture the result
+        result = client.update_l2vpn(TEST_SERVICE_ID, name="Updated L2VPN")
+
+        expected_response = {
             "description": "L2VPN Service Modified",
             "service_id": TEST_SERVICE_ID,
         }
-        mock_patch.return_value = mock_response
+        self.assertEqual(result, expected_response)
 
-        response = self.client.update_l2vpn(
-            service_id=TEST_SERVICE_ID,
-            state="enabled",
-            name=TEST_NAME,
-            endpoints=TEST_ENDPOINTS,
-            description="Test Description",
-            notifications={"email": "user@example.com", "enabled": True},
-            scheduling={
-                "start_time": "2024-08-26T00:00:00Z",
-                "end_time": "2024-08-27T00:00:00Z",
-            },
-            qos_metrics={"latency": {"value": 100, "priority": True}},
+        expected_url = f"{TEST_URL}/l2vpn/1.0/{TEST_SERVICE_ID}"
+        expected_payload = {"service_id": TEST_SERVICE_ID, "name": "Updated L2VPN"}
+        mock_patch.assert_called_with(
+            expected_url,
+            json=expected_payload,
+            auth=(None, None),
+            verify=True,
+            timeout=120,
         )
-
-        expected_response = SDXResponse(
-            {"description": "L2VPN Service Modified", "service_id": TEST_SERVICE_ID,}
-        )
-
-        self.assertEqual(response, expected_response)
-        mock_patch.assert_called_once()
 
     ## Test Update with Invalid JSON or Incomplete Body: 400 error code
     @patch("requests.patch")
