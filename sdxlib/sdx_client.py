@@ -2,11 +2,12 @@ import logging
 import pandas as pd
 import re
 import requests
-from typing import Optional, List, Dict, Union
+from typing import Optional, List, Dict, Union, Tuple
 from requests.exceptions import RequestException, HTTPError, Timeout
 
 from sdxlib.sdx_exception import SDXException
 from sdxlib.sdx_response import SDXResponse
+from sdxlib.sdx_topology import Topology, Port, Status
 
 # Basic configuration for logging to stdout
 # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -975,6 +976,24 @@ class SDXClient:
         except RequestException as e:
             self._logger.error(f"Failed to delete L2VPN: {e}")
             raise SDXException(message=f"Failed to delete L2VPN: {e}")
+        
+
+
+
+    def get_topology(self) -> Topology:
+        """Fetches the topology and returns it as a Topology object."""
+        topology_url = f"{self.base_url}/topology"
+
+        try:
+            auth = (self.http_username, self.http_password)
+            response = requests.get(topology_url, auth=auth, timeout=10)
+            response.raise_for_status()
+
+            return Topology.from_dict(response.json())
+        
+        except (HTTPError, Timeout, RequestException) as e:
+            self._logger.error(f"Failed to retrieve topology: {e}")
+            raise SDXException(f"Failed to retrieve topology: {e}")
 
     def get_available_ports(
         self, format: str = "dataframe"
@@ -990,22 +1009,42 @@ class SDXClient:
         Raises:
             SDXException: If the API request fails or returns an error.
         """
-        topology_url = f"{self.base_url}/topology"
+        # topology_url = f"{self.base_url}/topology"
 
-        try:
-            auth = (self.http_username, self.http_password)
-            response = requests.get(topology_url, auth=auth, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+        # try:
+        #     auth = (self.http_username, self.http_password)
+        #     response = requests.get(topology_url, auth=auth, timeout=10)
+        #     response.raise_for_status()
+        #     data = response.json()
 
+            # # Extract available ports
+            # port_list = []
+            # for node in data.get("nodes", []):
+            #     for port in node.get("ports", []):
+            #         if port.get("status") == "up" and not port.get("nni"):
+            #             port_list.append(
+            #                 {"Port ID": port.get("id"), "Status": port.get("status")}
+            #             )
+
+            # # Return in the requested format
+            # if format == "dataframe":
+            #     df = pd.DataFrame(port_list, index=None)
+            #     return df.style.hide(axis="index")
+            # elif format == "json":
+            #     return port_list
+            # else:
+            #     raise ValueError("Invalid format specified. Use 'dataframe' or 'json'.")
             # Extract available ports
+
+        # New code based on the Topology class
+        try:
+            topology = self.get_topology()
+            vlan_usage = self._get_vlans_in_use()
             port_list = []
-            for node in data.get("nodes", []):
-                for port in node.get("ports", []):
-                    if port.get("status") == "up" and not port.get("nni"):
-                        port_list.append(
-                            {"Port ID": port.get("id"), "Status": port.get("status")}
-                        )
+            for node in topology.nodes:
+                for port in node.ports:
+                    if port.status == Status.UP and not port.nni:
+                        port_list.append(self._format_port(port, vlan_usage))
 
             # Return in the requested format
             if format == "dataframe":
@@ -1015,40 +1054,118 @@ class SDXClient:
                 return port_list
             else:
                 raise ValueError("Invalid format specified. Use 'dataframe' or 'json'.")
+            
+        except SDXException as e:
+            self._logger.error(f"Failed to retrieve available ports: {e}.")
+            raise
 
-        except HTTPError as e:
-            status_code = e.response.status_code
-            error_details = None
+        # except HTTPError as e:
+        #     status_code = e.response.status_code
+        #     error_details = None
 
-            try:
-                error_details = e.response.json().get("error", None)
-            except ValueError:
-                error_details = e.response.text
+        #     try:
+        #         error_details = e.response.json().get("error", None)
+        #     except ValueError:
+        #         error_details = e.response.text
 
-            method_messages = {
-                400: "Request does not have a valid JSON or body is incomplete/incorrect",
-                401: "Not Authorized",
-                404: "Topology endpoint not found",
-            }
-            error_message = method_messages.get(status_code, "Unknown error occurred.")
-            self._logger.error(
-                f"Failed to retrieve available ports. Status code: {status_code}: {error_message}"
-            )
-            raise SDXException(
-                status_code=status_code,
-                method_messages=method_messages,
-                message=error_message,
-                error_details=error_details,
-            )
+        #     method_messages = {
+        #         400: "Request does not have a valid JSON or body is incomplete/incorrect",
+        #         401: "Not Authorized",
+        #         404: "Topology endpoint not found",
+        #     }
+        #     error_message = method_messages.get(status_code, "Unknown error occurred.")
+        #     self._logger.error(
+        #         f"Failed to retrieve available ports. Status code: {status_code}: {error_message}"
+        #     )
+        #     raise SDXException(
+        #         status_code=status_code,
+        #         method_messages=method_messages,
+        #         message=error_message,
+        #         error_details=error_details,
+        #     )
 
-        except Timeout:
-            self._logger.error("The request to retrieve available ports timed out.")
-            raise SDXException("The request to retrieve available ports timed out.")
+        # except Timeout:
+        #     self._logger.error("The request to retrieve available ports timed out.")
+        #     raise SDXException("The request to retrieve available ports timed out.")
 
-        except RequestException as e:
-            self._logger.error(f"Failed to retrieve available ports: {e}")
-            raise SDXException(f"Failed to retrieve available ports: {e}")
+        # except RequestException as e:
+        #     self._logger.error(f"Failed to retrieve available ports: {e}")
+        #     raise SDXException(f"Failed to retrieve available ports: {e}")
 
+
+    def _format_port(self, port: Port, vlan_usage: Dict[str, List[int]]) -> Dict[str, str]:
+        """Formats port data for display, using precomputed VLAN usage."""
+        domain, device, port_number = self._parse_port_id(port.id)
+        vlan_range = self._get_vlan_range(port)
+        vlans_in_use = vlan_usage.get(port.id, [])  # Lookup VLANs in use
+
+        return {
+            "Port ID": port.id,
+            "Domain": domain,
+            "Device": device,
+            "Port #": port_number,
+            "Status": port.status.value,
+            "VLAN Range": vlan_range,
+            "VLANs in Use": "; ".join(map(str, vlans_in_use)) if vlans_in_use else "None",
+        }
+    
+    def _parse_port_id(self, port_id: str) -> Tuple[str, str, str]:
+        """Parses the port ID to extract domain, device, and port number."""
+        match = re.match(r"urn:sdx:port:(.*?):(.*?):(.*?)$", port_id)
+        if match:
+            return match.group(1), match.group(2), match.group(3)
+        
+        # Log the error and continue
+        self._logger.error(f"Invalid port ID format: {port_id}")
+        return port_id, "Invalid Format", "Invalid Format"
+    
+    def _get_vlan_range(self, port: Port) -> str:
+        """Extracts VLAN availability range from the Port services attribute."""
+        try:
+            vlan_data = port.services.get("l2vpn-ptp", {}).get("vlan_range", [])
+            if vlan_data and isinstance(vlan_data, list) and all(len(v) == 2 for v in vlan_data):
+                # Convert list of ranges to readable format
+                return ", ".join(f"{start}-{end}" for start, end in vlan_data)
+        except Exception as e:
+            self._logger.error(f"Error extracting VLAN range from port {port.id}: {e}")
+        
+        return "None"
+    
+    def _get_vlans_in_use(self) -> Dict[str, List[int]]:
+        """
+        Retrieves VLANs in use for all ports by matching them with L2VPNs.
+
+        Returns:
+            Dict[str, List[int]]: A dictionary where keys are port IDs and values are lists of VLANs in use.
+        """
+        vlan_usage = {}
+
+        try:
+            l2vpns = self.get_all_l2vpns(format="json")  # Retrieve all active L2VPNs
+
+            for service_id, l2vpn in l2vpns.items():
+                for endpoint in l2vpn.get("endpoints", []):
+                    port_id = endpoint.get("port_id")
+                    vlan_value = endpoint.get("vlan")
+
+                    if port_id not in vlan_usage:
+                        vlan_usage[port_id] = set()  # Initialize VLAN set
+
+                    if isinstance(vlan_value, str) and ":" in vlan_value:
+                        start, end = map(int, vlan_value.split(":"))
+                        vlan_usage[port_id].update(range(start, end + 1))
+                    elif isinstance(vlan_value, int):
+                        vlan_usage[port_id].add(vlan_value)
+
+            # Convert sets to sorted lists
+            return {port_id: sorted(vlans) for port_id, vlans in vlan_usage.items()}
+
+        except SDXException as e:
+            self._logger.error(f"Error retrieving VLAN usage: {e}")
+            return {}
+
+
+    
     # Utility Methods
     def __str__(self) -> str:
         """Returns a string description of the SDXClient instance."""
