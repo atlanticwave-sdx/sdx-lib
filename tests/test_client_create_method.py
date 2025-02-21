@@ -192,7 +192,7 @@ class TestSDXClient(unittest.TestCase):
         )
         client.create_l2vpn()  # First call to populate the cache
         response = client.create_l2vpn()  # Second call should use the cache
-        self.assertEqual(response.service_id, "123")
+        self.assertEqual(response["service_id"], "123")
         self.assertEqual(
             mock_post.call_count, 1
         )  # Ensure requests.post was only called once
