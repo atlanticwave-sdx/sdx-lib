@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Dict, List, Optional, Union
 
 
@@ -19,78 +20,156 @@ class SDXResponse:
         oxp_service_ids (Optional[List[Dict[str, str]]]): A list of dictionaries containing OXP service IDs.
     """
 
+    ALLOWED_STATUS = {"up", "down", "error", "under provisioning", "maintenance"}
+    ALLOWED_STATE = {"enabled", "disabled"}
+
     def __init__(self, response_json: dict):
         """
-        Initializes the L2VPNResponse object from a JSON response dictionary.
+        Initializes the SDXResponse object and validates the response fields.
 
         Args:
-            response_json (dict): The JSON response dictionary from the L2VPN creation API.
+            response_json (dict): The JSON response dictionary from the L2VPN API.
+
+        Raises:
+            ValueError: If required fields are missing or invalid.
         """
+
         if not isinstance(response_json, dict):
             raise TypeError("Expected a dictionary response_json.")
 
-        self.service_id: str = response_json.get("service_id")
-        self.name: str = response_json.get("name")
-        self.endpoints: List[Dict[str, str]] = response_json.get("endpoints")
-        self.description: Optional[str] = response_json.get("description")
-        self.notifications: Optional[List[Dict[str, str]]] = response_json.get(
-            "notifications"
+        self._logger = logging.getLogger(__name__)
+
+        # Required fields - MUST have a value
+        self.service_id: str = self._validate_required(
+            response_json, "service_id", str, must_have_value=True
         )
-        self.scheduling: Optional[Dict[str, str]] = response_json.get("scheduling")
+        self.name: str = self._validate_required(
+            response_json, "name", str, must_have_value=True
+        )
+        self.endpoints: List[Dict[str, str]] = self._validate_required(
+            response_json, "endpoints", list, must_have_value=True
+        )
+        self.ownership: str = self._validate_required(
+            response_json, "ownership", str, must_have_value=True
+        )
+        self.creation_date: str = self._validate_required(
+            response_json, "creation_date", str, must_have_value=True
+        )
+        self.archived_date: str = self._validate_required(
+            response_json, "archived_date", str, must_have_value=True, default="0"
+        )
+        self.status: str = self._validate_required(
+            response_json, "status", str, must_have_value=True
+        )
+        self.state: str = self._validate_required(
+            response_json, "state", str, must_have_value=True
+        )
+        self.counters_location: str = self._validate_required(
+            response_json, "counters_location", str, must_have_value=True
+        )
+        self.last_modified: str = self._validate_required(
+            response_json, "last_modified", str, must_have_value=True, default="0"
+        )
+        self.current_path: List[str] = self._validate_required(
+            response_json, "current_path", list, must_have_value=True
+        )
+        self.oxp_service_ids: Dict[str, List[str]] = self._validate_required(
+            response_json, "oxp_service_ids", dict, must_have_value=True
+        )
+        # Optional fields - May be None
+        self.description: Optional[str] = self._validate_optional(
+            response_json, "description", str
+        )
+        self.notifications: Optional[List[Dict[str, str]]] = self._validate_optional(
+            response_json, "notifications", list
+        )
+        self.scheduling: Optional[Dict[str, str]] = self._validate_optional(
+            response_json, "scheduling", dict
+        )
         self.qos_metrics: Optional[
             Dict[str, Dict[str, Union[int, bool]]]
-        ] = response_json.get("qos_metrics")
-        self.ownership: str = response_json.get("ownership")
-        self.creation_date: str = response_json.get("creation_date")
-        self.archived_date: str = response_json.get("archived_date")
-        self.status: str = response_json.get("status")
-        self.state: str = response_json.get("state")
-        self.counters_location: str = response_json.get("counters_location")
-        self.last_modified: str = response_json.get("last_modified")
-        self.current_path: List[str] = response_json.get("current_path")
-        self.oxp_service_ids: List[Dict[str, str]] = response_json.get(
-            "oxp_service_ids"
-        )
+        ] = self._validate_optional(response_json, "qos_metrics", dict)
+
+        # Log successful validation
+        self._logger.debug("SDXResponse successfully initialized.")
+
+    def _validate_required(
+        self,
+        data: dict,
+        key: str,
+        expected_type: type,
+        must_have_value: bool = False,
+        default=None,
+    ):
+        """Ensures a required field exists and has a valid value."""
+        if key not in data:
+            self._logger.error(f"Missing required field: {key}")
+            raise ValueError(f"Missing required field: {key}")
+
+        value = data.get(key, default)
+
+        if must_have_value and (value is None or value == ""):
+            self._logger.error(
+                f"Required field {key} must have a value, cannot be None or empty."
+            )
+            raise ValueError(
+                f"Required field {key} must have a value, cannot be None or empty."
+            )
+
+        if value is not None and not isinstance(value, expected_type):
+            self._logger.error(
+                f"Invalid type for {key}: Expected {expected_type.__name__}, got {type(value).__name__}"
+            )
+            raise ValueError(
+                f"Invalid type for {key}: Expected {expected_type.__name__}, got {type(value).__name__}"
+            )
+
+        return value
+
+    def _validate_optional(self, data: dict, key: str, expected_type: type):
+        """Validates optional fields and ensures correct type if present."""
+        value = data.get(key)
+
+        if value is not None and not isinstance(value, expected_type):
+            self._logger.warning(
+                f"Optional field {key} has incorrect type: Expected {expected_type.__name__}, got {type(value).__name__}"
+            )
+            return None
+
+        return value
 
     def __eq__(self, other):
         if not isinstance(other, SDXResponse):
             return NotImplemented
-        return self.__dict__ == other.__dict__
+
+        return all(
+            getattr(self, attr) == getattr(other, attr)
+            for attr in vars(self)
+            if attr != "_logger"  # Exclude logger attribute
+        )
 
     def __str__(self):
-
-        # Format lists and dictionaries using json.dumps for indentation
-        formatted_endpoints = (
-            json.dumps(self.endpoints, indent=4) if self.endpoints else "None"
-        )
-        formatted_qos_metrics = (
-            json.dumps(self.qos_metrics, indent=4) if self.qos_metrics else "None"
-        )
-        formatted_notifications = (
-            json.dumps(self.notifications, indent=4) if self.notifications else "None"
-        )
-        formatted_oxp_service_ids = json.dumps(
-            [oxp["id"] for oxp in self.oxp_service_ids]
-            if isinstance(self.oxp_service_ids, list)
-            else self.oxp_service_ids,
+        """Formatted string representation for logging/debugging."""
+        return json.dumps(
+            {
+                "service_id": self.service_id,
+                "name": self.name,
+                "endpoints": self.endpoints,
+                "description": self.description,
+                "qos_metrics": self.qos_metrics,
+                "notifications": self.notifications,
+                "ownership": self.ownership,
+                "creation_date": self.creation_date,
+                "archived_date": self.archived_date,
+                "status": self.status,
+                "state": self.state,
+                "counters_location": self.counters_location,
+                "last_modified": self.last_modified,
+                "current_path": self.current_path,
+                "oxp_service_ids": [oxp["id"] for oxp in self.oxp_service_ids]
+                if isinstance(self.oxp_service_ids, list)
+                else self.oxp_service_ids,
+            },
             indent=4,
-        )
-
-        return (
-            "L2VPN Response:\n"
-            f"        service_id: '{self.service_id}'\n"
-            f"        name: '{self.name}'\n"
-            f"        endpoints: {formatted_endpoints}\n"
-            f"        description: '{self.description}'\n"
-            f"        qos_metrics: {formatted_qos_metrics}\n"
-            f"        notifications: {formatted_notifications}\n"
-            f"        ownership: '{self.ownership}'\n"
-            f"        creation_date: '{self.creation_date}'\n"
-            f"        archived_date: '{self.archived_date}'\n"
-            f"        status: '{self.status}'\n"
-            f"        state: '{self.state}'\n"
-            f"        counters_location: '{self.counters_location}'\n"
-            f"        last_modified: '{self.last_modified}'\n"
-            f"        current_path: {json.dumps(self.current_path, indent=4)}\n"
-            f"        oxp_service_ids: {formatted_oxp_service_ids}"
+            ensure_ascii=False,
         )
