@@ -1,9 +1,10 @@
 from sdxlib.sdx_client import SDXClient
 
+TEST_SERVICE_ID = "8344657b-2466-4735-9a21-143643073865"
 TEST_URL = "http://aw-sdx-controller.renci.org:8081"
 TEST_USERNAME = "testuser"
 TEST_PASSWORD = "testpassword"
-TEST_NAME = "Test L2VPN"
+TEST_NAME = "Test_L2VPN"
 TEST_ENDPOINTS = [
     {
         "port_id": "urn:sdx:port:test-oxp_url:test-node_name:test-port_name",
@@ -39,23 +40,12 @@ VLAN_UNTAGGED = {
     "vlan": "untagged",
 }
 
-TEST_SERVICE_ID = "8344657b-2466-4735-9a21-143643073865"
-
 MOCK_RESPONSE = {
     TEST_SERVICE_ID: {
         "service_id": TEST_SERVICE_ID,
-        "name": "VLAN between AMPATH/300 and TENET/150",
-        "endpoints": [
-            {"port_id": "urn:sdx:port:tenet.ac.za:Tenet03:50", "vlan": "150"},
-            {"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "vlan": "300"},
-        ],
-        "description": "This is an example to demonstrate a L2VPN with optional attributes",
-        "qos_metrics": {
-            "min_bw": {"value": 5, "strict": False},
-            "max_delay": {"value": 150, "strict": True},
-        },
-        "notifications": [{"email": "user@domain.com"}, {"email": "user2@domain2.com"}],
+        "name": TEST_NAME,
         "ownership": "user1",
+        "endpoints": TEST_ENDPOINTS,
         "creation_date": "20240522T00:00:00Z",
         "archived_date": "0",
         "status": "up",
@@ -63,8 +53,16 @@ MOCK_RESPONSE = {
         "counters_location": "https://my.aw-sdx.net/l2vpn/7cdf23e8978c",
         "last_modified": "0",
         "current_path": ["urn:sdx:link:tenet.ac.za:LinkToAmpath"],
-        "oxp_service_ids": {"ampath.net": ["c73da8e1"], "tenet.ac.za": ["5d034620"]},
+        "oxp_service_ids": {"ampath.net": ["c73da8e1"], "tenet.ac.za": ["5d034620"],},
+        "qos_metrics": {
+            "max_delay": {"strict": True, "value": 150},
+            "min_bw": {"strict": False, "value": 5},
+        },
         "scheduling": None,
+        "notifications": [
+            {"email": "user@domain.com"},
+            {"email": "user2@domain2.com"},
+        ],
     }
 }
 
