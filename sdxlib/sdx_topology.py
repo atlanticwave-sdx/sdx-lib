@@ -1,19 +1,35 @@
 import pycountry
 import re
 
+from dacite import from_dict, Config
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 # Global Constants
 MODEL_VERSION = "2.0.0"
 
-# Regex Patterns
-NAME_PATTERN = re.compile(r"^[\w.,\-/]{1,30}$")  # Limits name to <= 30 characters
-URN_TOPOLOGY_PATTERN = re.compile(r"^urn:sdx:topology:[\w.-]+$")
-URN_NODE_PATTERN = re.compile(r"^urn:sdx:node:[\w.-]+:[\w.-]+$")
-URN_PORT_PATTERN = re.compile(r"^urn:sdx:port:[\w.-]+:[\w.-]+:[\w.-]+$")
-URN_LINK_PATTERN = re.compile(r"^urn:sdx:link:[\w.-]+:[\w.-]+$")
+# # Regex Patterns
+# Matches name pattern
+NAME_PATTERN = re.compile(r"^[\w.,\-/]{1,30}$")
+
+# Matches topology URNs: urn:sdx:topology:<oxp_url>
+URN_TOPOLOGY_PATTERN = re.compile(r"^urn:sdx:topology:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,3}$")
+# Matches node URNs: urn:sdx:node:<oxp_url>:<node_name>
+URN_NODE_PATTERN = re.compile(
+    r"^urn:sdx:node:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,3}:[\w.,\-/]{1,30}$"
+)
+# Matches port URNs: urn:sdx:port:<oxp_url>:<node_name>:<port_name>
+URN_PORT_PATTERN = re.compile(
+    r"^urn:sdx:port:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,3}:[\w.,\-/]{1,30}:[\w.,\-/]{1,30}$"
+)
+# Matches link URNs: urn:sdx:link:<oxp_url>:<link_name>
+URN_LINK_PATTERN = re.compile(
+    r"^urn:sdx:link:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,3}:[\w.,\-/]{1,30}$"
+)
+
+
+# Matches timestamps (ISO 8601 format with 'Z' at the end)
 TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
@@ -21,12 +37,14 @@ class Status(Enum):
     UP = "up"
     DOWN = "down"
     ERROR = "error"
+    MAINTENANCE = "maintenance" # in spec but not topology
+    UNDER_PROVISIONING = "under provisioning" # in spec but not topology
 
 
 class State(Enum):
     ENABLED = "enabled"
     DISABLED = "disabled"
-    MAINTENANCE = "maintenance"
+    MAINTENANCE = "maintenance" # in topology but not spec
 
 
 class PortType(str, Enum):
@@ -134,7 +152,9 @@ class Port:
                     raise ValueError(
                         f"Invalid VLAN range: {vlan_range}. Must be between 1 and 4095, and first value must be smaller than the second."
                     )
-
+    def __hash__(self):
+        """Make Port hashable by using its unique ID."""
+        return hash(self.id)
 
 @dataclass
 class Node:
@@ -247,8 +267,20 @@ class Topology:
             raise TypeError("All elements in 'links' must be Link objects.")
 
         # Ensure services contain only valid values
+        # Ensure services contain only valid values
         allowed_services = {"l2vpn-ptp", "l2vpn-ptmp"}
-        if not all(service in allowed_services for service in self.services):
+        if self.services is None:
+            self.services = ["l2vpn-ptp"]  # Default if missing
+        elif not all(service in allowed_services for service in self.services):
             raise ValueError(
                 f"Invalid service type. Must be one of {allowed_services}."
             )
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Topology":
+        """Automatically converts a dictionary to a Topology object using dacite."""
+        return from_dict(
+            data_class=cls,
+            data=data,
+            config=Config(cast=[Status, State, PortType, LinkType, List[str]]),
+        )
