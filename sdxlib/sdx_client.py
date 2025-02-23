@@ -2,11 +2,12 @@ import logging
 import pandas as pd
 import re
 import requests
-from typing import Optional, List, Dict, Union, Tuple
+
 from requests.exceptions import RequestException, HTTPError, Timeout
+from typing import Optional, List, Dict, Union, Tuple
 
 from sdxlib.sdx_exception import SDXException
-from sdxlib.sdx_response import SDXResponse
+from sdxlib.sdx_response import SDXResponse, SDXTopologyResponse
 from sdxlib.sdx_topology import Topology, Port, Status
 
 # Basic configuration for logging to stdout
@@ -976,24 +977,6 @@ class SDXClient:
         except RequestException as e:
             self._logger.error(f"Failed to delete L2VPN: {e}")
             raise SDXException(message=f"Failed to delete L2VPN: {e}")
-        
-
-
-
-    def get_topology(self) -> Topology:
-        """Fetches the topology and returns it as a Topology object."""
-        topology_url = f"{self.base_url}/topology"
-
-        try:
-            auth = (self.http_username, self.http_password)
-            response = requests.get(topology_url, auth=auth, timeout=10)
-            response.raise_for_status()
-
-            return Topology.from_dict(response.json())
-        
-        except (HTTPError, Timeout, RequestException) as e:
-            self._logger.error(f"Failed to retrieve topology: {e}")
-            raise SDXException(f"Failed to retrieve topology: {e}")
 
     def get_available_ports(
         self, format: str = "dataframe"
@@ -1017,44 +1000,51 @@ class SDXClient:
         #     response.raise_for_status()
         #     data = response.json()
 
-            # # Extract available ports
-            # port_list = []
-            # for node in data.get("nodes", []):
-            #     for port in node.get("ports", []):
-            #         if port.get("status") == "up" and not port.get("nni"):
-            #             port_list.append(
-            #                 {"Port ID": port.get("id"), "Status": port.get("status")}
-            #             )
+        # # Extract available ports
+        # port_list = []
+        # for node in data.get("nodes", []):
+        #     for port in node.get("ports", []):
+        #         if port.get("status") == "up" and not port.get("nni"):
+        #             port_list.append(
+        #                 {"Port ID": port.get("id"), "Status": port.get("status")}
+        #             )
 
-            # # Return in the requested format
-            # if format == "dataframe":
-            #     df = pd.DataFrame(port_list, index=None)
-            #     return df.style.hide(axis="index")
-            # elif format == "json":
-            #     return port_list
-            # else:
-            #     raise ValueError("Invalid format specified. Use 'dataframe' or 'json'.")
-            # Extract available ports
+        # # Return in the requested format
+        # if format == "dataframe":
+        #     df = pd.DataFrame(port_list, index=None)
+        #     return df.style.hide(axis="index")
+        # elif format == "json":
+        #     return port_list
+        # else:
+        #     raise ValueError("Invalid format specified. Use 'dataframe' or 'json'.")
+        # Extract available ports
 
         # New code based on the Topology class
         try:
             topology = self.get_topology()
             vlan_usage = self._get_vlans_in_use()
-            port_list = []
-            for node in topology.nodes:
-                for port in node.ports:
-                    if port.status == Status.UP and not port.nni:
-                        port_list.append(self._format_port(port, vlan_usage))
+
+            # Get available ports from SDXTopologyResponse
+            available_ports = topology.get_available_ports()
+
+            # Format ports
+            formatted_ports = [self._format_port(port, vlan_usage) for port in available_ports]
+
+            # port_list = []
+            # for node in topology.nodes:
+            #     for port in node.ports:
+            #         if port.status == Status.UP and not port.nni:
+            #             port_list.append(self._format_port(port, vlan_usage))
 
             # Return in the requested format
             if format == "dataframe":
-                df = pd.DataFrame(port_list, index=None)
+                df = pd.DataFrame(formatted_ports, index=None)
                 return df.style.hide(axis="index")
             elif format == "json":
-                return port_list
+                return formatted_ports
             else:
                 raise ValueError("Invalid format specified. Use 'dataframe' or 'json'.")
-            
+
         except SDXException as e:
             self._logger.error(f"Failed to retrieve available ports: {e}.")
             raise
@@ -1092,8 +1082,9 @@ class SDXClient:
         #     self._logger.error(f"Failed to retrieve available ports: {e}")
         #     raise SDXException(f"Failed to retrieve available ports: {e}")
 
-
-    def _format_port(self, port: Port, vlan_usage: Dict[str, List[int]]) -> Dict[str, str]:
+    def _format_port(
+        self, port: Port, vlan_usage: Dict[str, List[int]]
+    ) -> Dict[str, str]:
         """Formats port data for display, using precomputed VLAN usage."""
         domain, device, port_number = self._parse_port_id(port.id)
         vlan_range = self._get_vlan_range(port)
@@ -1106,31 +1097,37 @@ class SDXClient:
             "Port #": port_number,
             "Status": port.status.value,
             "VLAN Range": vlan_range,
-            "VLANs in Use": "; ".join(map(str, vlans_in_use)) if vlans_in_use else "None",
+            "VLANs in Use": "; ".join(map(str, vlans_in_use))
+            if vlans_in_use
+            else "None",
         }
-    
+
     def _parse_port_id(self, port_id: str) -> Tuple[str, str, str]:
         """Parses the port ID to extract domain, device, and port number."""
         match = re.match(r"urn:sdx:port:(.*?):(.*?):(.*?)$", port_id)
         if match:
             return match.group(1), match.group(2), match.group(3)
-        
+
         # Log the error and continue
         self._logger.error(f"Invalid port ID format: {port_id}")
         return port_id, "Invalid Format", "Invalid Format"
-    
+
     def _get_vlan_range(self, port: Port) -> str:
         """Extracts VLAN availability range from the Port services attribute."""
         try:
             vlan_data = port.services.get("l2vpn-ptp", {}).get("vlan_range", [])
-            if vlan_data and isinstance(vlan_data, list) and all(len(v) == 2 for v in vlan_data):
+            if (
+                vlan_data
+                and isinstance(vlan_data, list)
+                and all(len(v) == 2 for v in vlan_data)
+            ):
                 # Convert list of ranges to readable format
                 return ", ".join(f"{start}-{end}" for start, end in vlan_data)
         except Exception as e:
             self._logger.error(f"Error extracting VLAN range from port {port.id}: {e}")
-        
+
         return "None"
-    
+
     def _get_vlans_in_use(self) -> Dict[str, List[int]]:
         """
         Retrieves VLANs in use for all ports by matching them with L2VPNs.
@@ -1164,8 +1161,38 @@ class SDXClient:
             self._logger.error(f"Error retrieving VLAN usage: {e}")
             return {}
 
+    def get_topology(self) -> SDXTopologyResponse:
+        """
+        Fetches the topology from the SDX controller and returns an SDXTopologyResponse object.
+        """
+        url = f"{self.base_url}/topology"
 
-    
+        try:
+            response = requests.get(url, auth=(self.http_username, self.http_password), timeout=10)
+            response.raise_for_status()
+            return SDXTopologyResponse.from_json(response.json())
+
+        except (HTTPError, Timeout, RequestException) as e:
+            self._logger.error(f"Failed to retrieve topology: {e}")
+            raise SDXException(f"Failed to retrieve topology: {e}")
+
+    def search_ports(self, search_term: str) -> pd.DataFrame:
+        """
+        Searches for ports based on a substring in the port name.
+        """
+        topology = self.get_topology()
+        filtered_ports = topology.search_ports(search_term)
+        return pd.DataFrame([port.__dict__ for port in filtered_ports])
+
+    def search_entities(self, search_term: str) -> pd.DataFrame:
+        """
+        Searches for ports based on entities.
+        """
+        topology = self.get_topology()
+        filtered_ports = topology.search_entities(search_term)
+        return pd.DataFrame([port.__dict__ for port in filtered_ports])
+
+
     # Utility Methods
     def __str__(self) -> str:
         """Returns a string description of the SDXClient instance."""
