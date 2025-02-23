@@ -52,6 +52,18 @@ class TestPort(unittest.TestCase):
         port = sample_port2
         self.assertEqual(port.entities, ["Sprace", "UNESP", "LHC Tier 2 Brazil"])
 
+    def test_none_services(self):
+        """Test that setting services to None is handled correctly."""
+        port = Port(name="Port1", id="urn:sdx:port:ampath.net:Node1:Port1", node="urn:sdx:node:ampath.net:Node1",
+                    type=PortType.GE_10, status=Status.UP, state=State.ENABLED, services=None)
+        self.assertEqual(port.services, {"l2vpn-ptp": {"vlan_range": [[1, 4095]]}})
+
+    def test_invalid_vlan_range(self):
+        """Test that VLAN ranges where the first number is greater than the second raise ValueError."""
+        with self.assertRaises(ValueError):
+            Port(name="Port1", id="urn:sdx:port:test:1", node="urn:sdx:node:test:1",
+                 type=PortType.GE_10, status=Status.UP, state=State.ENABLED,
+                 services={"l2vpn-ptp": {"vlan_range": [[4095, 1]]}})
 
 if __name__ == "__main__":
     unittest.main()

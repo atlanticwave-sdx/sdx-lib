@@ -73,6 +73,17 @@ class TestNode(unittest.TestCase):
                 state=sample_node1.state,
             )
 
+    def test_node_with_none_ports(self):
+        """Test that a Node with None as ports raises TypeError."""
+        with self.assertRaises(ValueError):
+            Node(
+                name=sample_node1.name,
+                id=sample_node1.id,
+                location=sample_node1.location,
+                ports=None,  # Ports set to None
+                status=sample_node1.status,
+                state=sample_node1.state,
+            )
 
 if __name__ == "__main__":
     unittest.main()
