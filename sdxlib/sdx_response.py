@@ -5,7 +5,11 @@ from dacite import from_dict, Config
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
-from sdxlib.sdx_topology import Node, Port, Link, Location, State, Status
+from sdxlib.sdx_topology import Node, Port, Link, Location, State, Status, MODEL_VERSION
+
+# Global Constants
+MODEL_VERSION = "2.0.0"
+
 
 class SDXResponse:
     """
@@ -62,24 +66,21 @@ class SDXResponse:
         self.archived_date: str = self._validate_required(
             response_json, "archived_date", str, must_have_value=True, default="0"
         )
-        # self.status: str = self._validate_required(
-        #     response_json, "status", str, must_have_value=True
-        # )
-        # if self.status not in self.ALLOWED_STATUS:
-        #     raise ValueError(f"Invalid status: {self.status}. Allowed values: {self.ALLOWED_STATUS}")
 
-        # self.state: str = self._validate_required(
-        #     response_json, "state", str, must_have_value=True
-        # )
-        # if self.state not in self.ALLOWED_STATE:
-        #     raise ValueError(f"Invalid state: {self.state}. Allowed values: {self.ALLOWED_STATE}")
-        
         self.status: str = self._validate_required(
-            response_json, "status", str, must_have_value=True, allowed_values=self.ALLOWED_STATUS
+            response_json,
+            "status",
+            str,
+            must_have_value=True,
+            allowed_values=self.ALLOWED_STATUS,
         )
 
         self.state: str = self._validate_required(
-            response_json, "state", str, must_have_value=True, allowed_values=self.ALLOWED_STATE
+            response_json,
+            "state",
+            str,
+            must_have_value=True,
+            allowed_values=self.ALLOWED_STATE,
         )
 
         self.counters_location: str = self._validate_required(
@@ -111,38 +112,6 @@ class SDXResponse:
         # Log successful validation
         self._logger.debug("SDXResponse successfully initialized.")
 
-    # def _validate_required(
-    #     self,
-    #     data: dict,
-    #     key: str,
-    #     expected_type: type,
-    #     must_have_value: bool = False,
-    #     default=None,
-    # ):
-    #     """Ensures a required field exists and has a valid value."""
-    #     if key not in data:
-    #         self._logger.error(f"Missing required field: {key}")
-    #         raise ValueError(f"Missing required field: {key}")
-
-    #     value = data.get(key, default)
-
-    #     if must_have_value and (value is None or value == ""):
-    #         self._logger.error(
-    #             f"Required field {key} must have a value, cannot be None or empty."
-    #         )
-    #         raise ValueError(
-    #             f"Required field {key} must have a value, cannot be None or empty."
-    #         )
-
-    #     if value is not None and not isinstance(value, expected_type):
-    #         self._logger.error(
-    #             f"Invalid type for {key}: Expected {expected_type.__name__}, got {type(value).__name__}"
-    #         )
-    #         raise ValueError(
-    #             f"Invalid type for {key}: Expected {expected_type.__name__}, got {type(value).__name__}"
-    #         )
-
-    #     return value
     def _validate_required(
         self,
         data: dict,
@@ -160,19 +129,31 @@ class SDXResponse:
         value = data.get(key, default)
 
         if must_have_value and (value is None or value == ""):
-            self._logger.error(f"Required field {key} must have a value, cannot be None or empty.")
-            raise ValueError(f"Required field {key} must have a value, cannot be None or empty.")
+            self._logger.error(
+                f"Required field {key} must have a value, cannot be None or empty."
+            )
+            raise ValueError(
+                f"Required field {key} must have a value, cannot be None or empty."
+            )
 
         if value is not None and not isinstance(value, expected_type):
-            self._logger.error(f"Invalid type for {key}: Expected {expected_type.__name__}, got {type(value).__name__}")
-            raise ValueError(f"Invalid type for {key}: Expected {expected_type.__name__}, got {type(value).__name__}")
+            self._logger.error(
+                f"Invalid type for {key}: Expected {expected_type.__name__}, got {type(value).__name__}"
+            )
+            raise ValueError(
+                f"Invalid type for {key}: Expected {expected_type.__name__}, got {type(value).__name__}"
+            )
 
         if allowed_values and value not in allowed_values:
-            self._logger.error(f"Invalid {key}: {value}. Allowed values: {allowed_values}")
-            raise ValueError(f"Invalid {key}: {value}. Allowed values: {allowed_values}")
+            self._logger.error(
+                f"Invalid {key}: {value}. Allowed values: {allowed_values}"
+            )
+            raise ValueError(
+                f"Invalid {key}: {value}. Allowed values: {allowed_values}"
+            )
 
         return value
-    
+
     def _validate_optional(self, data: dict, key: str, expected_type: type):
         """Validates optional fields and ensures correct type if present."""
         value = data.get(key)
@@ -220,63 +201,28 @@ class SDXResponse:
             indent=4,
             ensure_ascii=False,
         )
-    
+
 
 @dataclass
 class SDXTopologyResponse:
     """
     Parses and stores the topology response from the SDX controller.
     """
-    # Stores list of all nodes in network
+
+    name: str
+    id: str
+    version: int
+    timestamp: str
+    model_version: str = MODEL_VERSION
     nodes: List[Node] = field(default_factory=list)
-    # Stores list of all links between nodes
     links: List[Link] = field(default_factory=list)
-    # Dict that maps port.id to a Port object for fast lookups
-    port_lookup: Dict[str, Port] = field(default_factory=dict)
+    services: Optional[List[str]] = field(default_factory=lambda: ["l2vpn-ptp"])
 
     @classmethod
     def from_json(cls, response_json: dict) -> "SDXTopologyResponse":
         """
-        Parses JSON response from SDX Controller and returns an instance of SDXTopologyResponse.
+        Parses JSON response and returns an SDXTopologyResponse instance.
         """
-        nodes = []
-        port_lookup = {}
-
-        # Extract nodes from response_json['nodes']
-        for node_data in response_json.get("nodes", []):
-            # Convert JSON into Node object
-            node = from_dict(Node, node_data, config=Config(cast=[Status, State]))
-            
-            # Populate port lookup dictionary
-            for port in node.ports:
-                port_lookup[port.id] = port
-            
-            # Add parsed node to nodes list
-            nodes.append(node)
-        
-        # Same thing for links as for nodes except no lookup table 
-        links = [
-            from_dict(Link, link_data, config=Config(cast=[Status, State]))
-            for link_data in response_json.get("links", [])
-        ]
-
-        # Returns SDXTopologyResponse instance with nodes list, links list, and port lookup dict
-        return cls(nodes=nodes, links=links, port_lookup=port_lookup)
-
-
-    def get_available_ports(self) -> List[Port]:
-        """Returns a list of available ports that are UP and not NNI."""
-        return [port for port in self.port_lookup.values() if port.status == Status.UP and not port.nni]
-
-    def search_ports(self, search_term: str) -> List[Port]:
-        """Search for ports based on a substring in the port name."""
-        return [port for port in self.port_lookup.values() if search_term.lower() in port.name.lower()]
-
-    # Allows substring search of entities
-    def search_entities(self, search_term: str) -> List[Port]:
-        """Search for ports based on entities."""
-        return [
-            port for port in self.port_lookup.values()
-            if any(search_term.lower() in entity.lower() for entity in port.entities)
-        ]
-
+        return from_dict(
+            SDXTopologyResponse, response_json, config=Config(cast=[Status, State])
+        )

@@ -85,5 +85,6 @@ class TestNode(unittest.TestCase):
                 state=sample_node1.state,
             )
 
+
 if __name__ == "__main__":
     unittest.main()

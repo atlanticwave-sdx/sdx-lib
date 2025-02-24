@@ -992,34 +992,6 @@ class SDXClient:
         Raises:
             SDXException: If the API request fails or returns an error.
         """
-        # topology_url = f"{self.base_url}/topology"
-
-        # try:
-        #     auth = (self.http_username, self.http_password)
-        #     response = requests.get(topology_url, auth=auth, timeout=10)
-        #     response.raise_for_status()
-        #     data = response.json()
-
-        # # Extract available ports
-        # port_list = []
-        # for node in data.get("nodes", []):
-        #     for port in node.get("ports", []):
-        #         if port.get("status") == "up" and not port.get("nni"):
-        #             port_list.append(
-        #                 {"Port ID": port.get("id"), "Status": port.get("status")}
-        #             )
-
-        # # Return in the requested format
-        # if format == "dataframe":
-        #     df = pd.DataFrame(port_list, index=None)
-        #     return df.style.hide(axis="index")
-        # elif format == "json":
-        #     return port_list
-        # else:
-        #     raise ValueError("Invalid format specified. Use 'dataframe' or 'json'.")
-        # Extract available ports
-
-        # New code based on the Topology class
         try:
             topology = self.get_topology()
             vlan_usage = self._get_vlans_in_use()
@@ -1028,13 +1000,9 @@ class SDXClient:
             available_ports = topology.get_available_ports()
 
             # Format ports
-            formatted_ports = [self._format_port(port, vlan_usage) for port in available_ports]
-
-            # port_list = []
-            # for node in topology.nodes:
-            #     for port in node.ports:
-            #         if port.status == Status.UP and not port.nni:
-            #             port_list.append(self._format_port(port, vlan_usage))
+            formatted_ports = [
+                self._format_port(port, vlan_usage) for port in available_ports
+            ]
 
             # Return in the requested format
             if format == "dataframe":
@@ -1048,39 +1016,6 @@ class SDXClient:
         except SDXException as e:
             self._logger.error(f"Failed to retrieve available ports: {e}.")
             raise
-
-        # except HTTPError as e:
-        #     status_code = e.response.status_code
-        #     error_details = None
-
-        #     try:
-        #         error_details = e.response.json().get("error", None)
-        #     except ValueError:
-        #         error_details = e.response.text
-
-        #     method_messages = {
-        #         400: "Request does not have a valid JSON or body is incomplete/incorrect",
-        #         401: "Not Authorized",
-        #         404: "Topology endpoint not found",
-        #     }
-        #     error_message = method_messages.get(status_code, "Unknown error occurred.")
-        #     self._logger.error(
-        #         f"Failed to retrieve available ports. Status code: {status_code}: {error_message}"
-        #     )
-        #     raise SDXException(
-        #         status_code=status_code,
-        #         method_messages=method_messages,
-        #         message=error_message,
-        #         error_details=error_details,
-        #     )
-
-        # except Timeout:
-        #     self._logger.error("The request to retrieve available ports timed out.")
-        #     raise SDXException("The request to retrieve available ports timed out.")
-
-        # except RequestException as e:
-        #     self._logger.error(f"Failed to retrieve available ports: {e}")
-        #     raise SDXException(f"Failed to retrieve available ports: {e}")
 
     def _format_port(
         self, port: Port, vlan_usage: Dict[str, List[int]]
@@ -1161,16 +1096,32 @@ class SDXClient:
             self._logger.error(f"Error retrieving VLAN usage: {e}")
             return {}
 
-    def get_topology(self) -> SDXTopologyResponse:
+    def get_topology(self) -> Topology:
         """
-        Fetches the topology from the SDX controller and returns an SDXTopologyResponse object.
+        Fetches the topology from the SDX controller and returns an Topology object.
         """
         url = f"{self.base_url}/topology"
 
         try:
-            response = requests.get(url, auth=(self.http_username, self.http_password), timeout=10)
+            response = requests.get(
+                url, auth=(self.http_username, self.http_password), timeout=10
+            )
             response.raise_for_status()
-            return SDXTopologyResponse.from_json(response.json())
+
+            # First, parse the raw response
+            raw_topology = SDXTopologyResponse.from_json(response.json())
+
+            # Convert it to processed topology
+            return Topology(
+                name=raw_topology.name,
+                id=raw_topology.id,
+                version=raw_topology.version,
+                timestamp=raw_topology.timestamp,
+                model_version=raw_topology.model_version,
+                nodes=raw_topology.nodes,
+                links=raw_topology.links,
+                services=raw_topology.services,
+            )
 
         except (HTTPError, Timeout, RequestException) as e:
             self._logger.error(f"Failed to retrieve topology: {e}")
@@ -1191,7 +1142,6 @@ class SDXClient:
         topology = self.get_topology()
         filtered_ports = topology.search_entities(search_term)
         return pd.DataFrame([port.__dict__ for port in filtered_ports])
-
 
     # Utility Methods
     def __str__(self) -> str:

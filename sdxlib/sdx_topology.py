@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, List, Dict, Any
 
+# from sdxlib.sdx_response import SDXTopologyResponse
+
 # Global Constants
 MODEL_VERSION = "2.0.0"
 
@@ -37,14 +39,14 @@ class Status(Enum):
     UP = "up"
     DOWN = "down"
     ERROR = "error"
-    MAINTENANCE = "maintenance" # in spec but not topology
-    UNDER_PROVISIONING = "under provisioning" # in spec but not topology
+    MAINTENANCE = "maintenance"  # in spec but not topology
+    UNDER_PROVISIONING = "under provisioning"  # in spec but not topology
 
 
 class State(Enum):
     ENABLED = "enabled"
     DISABLED = "disabled"
-    MAINTENANCE = "maintenance" # in topology but not spec
+    MAINTENANCE = "maintenance"  # in topology but not spec
 
 
 class PortType(str, Enum):
@@ -152,9 +154,11 @@ class Port:
                     raise ValueError(
                         f"Invalid VLAN range: {vlan_range}. Must be between 1 and 4095, and first value must be smaller than the second."
                     )
+
     def __hash__(self):
         """Make Port hashable by using its unique ID."""
         return hash(self.id)
+
 
 @dataclass
 class Node:
@@ -233,6 +237,10 @@ class Link:
 
 @dataclass
 class Topology:
+    """
+    A processed version of SDXTopologyResponse that adds fast lookups for ports, nodes, and links.
+    """
+
     name: str
     id: str
     version: int
@@ -241,8 +249,12 @@ class Topology:
     nodes: List[Node] = field(default_factory=list)
     links: List[Link] = field(default_factory=list)
     services: Optional[List[str]] = field(default_factory=lambda: ["l2vpn-ptp"])
+    port_lookup: Dict[str, Port] = field(default_factory=dict)
 
     def __post_init__(self):
+        """Automatically populates lookup dictionaries for fast searching."""
+
+        # Run validation logic on the parsed data
         if not NAME_PATTERN.match(self.name) or len(self.name) > 30:
             raise ValueError(f"Invalid topology name: {self.name}")
         if not URN_TOPOLOGY_PATTERN.match(self.id):
@@ -267,7 +279,6 @@ class Topology:
             raise TypeError("All elements in 'links' must be Link objects.")
 
         # Ensure services contain only valid values
-        # Ensure services contain only valid values
         allowed_services = {"l2vpn-ptp", "l2vpn-ptmp"}
         if self.services is None:
             self.services = ["l2vpn-ptp"]  # Default if missing
@@ -275,6 +286,35 @@ class Topology:
             raise ValueError(
                 f"Invalid service type. Must be one of {allowed_services}."
             )
+
+        # Populate fast lookup table
+        for node in self.nodes:
+            for port in node.ports:
+                self.port_lookup[port.id] = port
+
+    def get_available_ports(self) -> List[Port]:
+        """Returns a list of available ports that are UP and not NNI."""
+        return [
+            port
+            for port in self.port_lookup.values()
+            if port.status == Status.UP and not port.nni
+        ]
+
+    def search_ports(self, search_term: str) -> List[Port]:
+        """Search for ports based on a substring in the port name."""
+        return [
+            port
+            for port in self.port_lookup.values()
+            if search_term.lower() in port.name.lower()
+        ]
+
+    def search_entities(self, search_term: str) -> List[Port]:
+        """Search for ports based on entities."""
+        return [
+            port
+            for port in self.port_lookup.values()
+            if any(search_term.lower() in entity.lower() for entity in port.entities)
+        ]
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Topology":
