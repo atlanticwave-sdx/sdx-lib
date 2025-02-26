@@ -521,7 +521,7 @@ topology = {
                     "state": "enabled",
                     "nni": "urn:sdx:link:sax.net:Sax01/1_Sax02/1",
                     "type": "10GE",
-                    "entities": ["FIU", "Florida International Unitversity", "Miami"],
+                    "entities": ["FIU", "Florida International Unitversity", "Miami", "florida international university", "florida national university", "florida technology university"],
                     "services": {
                         "l2vpn-ptp": {"vlan_range": [[1, 4095]]},
                         "l2vpn-ptmp": {},
