@@ -5,7 +5,7 @@ from dacite import from_dict, Config
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
-from sdxlib.sdx_topology import Node, Port, Link, Location, State, Status, MODEL_VERSION
+from sdxlib.sdx_topology import *  
 
 # Global Constants
 MODEL_VERSION = "2.0.0"
@@ -66,6 +66,9 @@ class SDXResponse:
         self.archived_date: str = self._validate_required(
             response_json, "archived_date", str, must_have_value=True, default="0"
         )
+        self.archived_date: Optional[str] = self._validate_optional(
+            response_json, "archived_date", str
+        ) or "0"
 
         self.status: str = self._validate_required(
             response_json,
@@ -159,9 +162,9 @@ class SDXResponse:
         value = data.get(key)
 
         if value is not None and not isinstance(value, expected_type):
-            self._logger.warning(
-                f"Optional field {key} has incorrect type: Expected {expected_type.__name__}, got {type(value).__name__}"
-            )
+            # self._logger.warning(
+            #     f"Optional field {key} has incorrect type: Expected {expected_type.__name__}, got {type(value).__name__}"
+            # )
             return None
 
         return value
@@ -222,7 +225,18 @@ class SDXTopologyResponse:
     def from_json(cls, response_json: dict) -> "SDXTopologyResponse":
         """
         Parses JSON response and returns an SDXTopologyResponse instance.
+        Ensures latitude, longitude, and port type are cast to correct types.
         """
-        return from_dict(
-            SDXTopologyResponse, response_json, config=Config(cast=[Status, State])
+        config = Config(
+            cast=[Status, State, LinkType],
+            type_hooks={
+                float: lambda v: float(v)
+                if isinstance(v, str)
+                else v,  # Convert lat/lon to float
+                PortType: lambda v: PortType(v)
+                if isinstance(v, str)
+                else v,  # Convert port type to enum
+                LinkType: lambda v: LinkType(v) if isinstance(v, str) else v,
+            },
         )
+        return from_dict(Topology, response_json, config=config)
