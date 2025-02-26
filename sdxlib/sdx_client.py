@@ -1,8 +1,13 @@
+
+import ipywidgets as widgets
+import json
 import logging
 import pandas as pd
 import re
 import requests
+import sys
 
+from IPython.display import display
 from requests.exceptions import RequestException, HTTPError, Timeout
 from typing import Optional, List, Dict, Union, Tuple
 
@@ -89,6 +94,11 @@ class SDXClient:
     #     except (FileNotFoundError, json.JSONDecodeError) as e:
     #         self._logger.error(f"Could not load FABRIC token: {e}")
     #         return None
+
+    # Set global Pandas display options
+    pd.set_option('display.max_colwidth', None)  # Show full column width without truncation
+    pd.set_option('display.width', 1000)  # Expand the display width to prevent wrapping
+    pd.set_option('display.max_columns', None)  # Ensure all columns are shown if needed
 
     @property
     def base_url(self) -> str:
@@ -747,8 +757,8 @@ class SDXClient:
             response = requests.get(url, auth=auth, verify=True, timeout=120)
             response.raise_for_status()
             response_json = response.json()
-            self._logger.info(f"L2VPN retrieval request sent to {url}.")
-            self._logger.info(f"Full response: {response_json}")
+            # self._logger.info(f"L2VPN retrieval request sent to {url}.")
+            # self._logger.info(f"Full response: {response_json}")
             l2vpn_data = response_json.get(service_id)
 
             if l2vpn_data is None:
@@ -792,8 +802,20 @@ class SDXClient:
                 ]
 
                 df = pd.DataFrame(node_info_list)
-                return df[ordered_columns] if not df.empty else df
+                df = df.drop(columns=["_logger"], errors="ignore")
 
+                # Perform the empty check on the actual DataFrame, not the Styler object
+                if df.empty:
+                    return "No L2VPNS currently exist."
+                
+                # Select ordered columns before applying styling
+                df = df[ordered_columns]
+
+                # Apply styling at the very end
+                styled_df = df.style.set_table_attributes("style='display:inline; overflow-x: auto;'").hide_index()
+
+                return styled_df
+            
             elif format == "json":
                 return vars(sdx_response)
 
@@ -856,7 +878,7 @@ class SDXClient:
         else:
             url = f"{self.base_url}/l2vpn/{self.VERSION}"
 
-        self._logger.info(f"Retrieving L2VPNs: URL={url}")
+        # self._logger.info(f"Retrieving L2VPNs: URL={url}")
 
         try:
             auth = (self.http_username, self.http_password)
@@ -864,8 +886,11 @@ class SDXClient:
             response.raise_for_status()
 
             l2vpns_json = response.json()
-            self._logger.info(f"L2VPN retrieval request sent to {url}.")
-            self._logger.info(f"Retrieved L2VPNs successfully: {l2vpns_json}")
+            # Debug: Print the API response
+            # print(json.dumps(l2vpns_json, indent=4))
+
+            # self._logger.info(f"L2VPN retrieval request sent to {url}.")
+            # self._logger.info(f"Retrieved L2VPNs successfully: {l2vpns_json}")
 
             # Parse each L2VPN JSON into SDXResponse objects
             l2vpns = {
@@ -878,13 +903,16 @@ class SDXClient:
                 node_info_list = [
                     {
                         "service_id": service_id,
-                        **vars(
-                            sdx_response
-                        ),  # Convert SDXResponse attributes to dictionary
+                        **{
+                            k: v
+                            for k, v in vars(sdx_response).items()
+                            if k != "_logger"
+                        },  # Convert SDXResponse attributes to dictionary
                     }
                     for service_id, sdx_response in l2vpns.items()
                 ]
                 return pd.DataFrame(node_info_list)
+            
             elif format == "json":
                 return {
                     service_id: vars(sdx_response)
@@ -994,6 +1022,7 @@ class SDXClient:
         """
         try:
             topology = self.get_topology()
+            # print(f"DEBUG: get_topology() returned {type(topology)}")
             vlan_usage = self._get_vlans_in_use()
 
             # Get available ports from SDXTopologyResponse
@@ -1006,8 +1035,15 @@ class SDXClient:
 
             # Return in the requested format
             if format == "dataframe":
+            
                 df = pd.DataFrame(formatted_ports, index=None)
-                return df.style.hide(axis="index")
+
+                # Perform the empty check on the actual DataFrame, not the Styler object
+                if df.empty:
+                    return "No Ports currently exist."
+
+                return df
+
             elif format == "json":
                 return formatted_ports
             else:
@@ -1022,7 +1058,7 @@ class SDXClient:
     ) -> Dict[str, str]:
         """Formats port data for display, using precomputed VLAN usage."""
         domain, device, port_number = self._parse_port_id(port.id)
-        vlan_range = self._get_vlan_range(port)
+        vlan_range = self._get_vlan_range(port, vlan_usage)
         vlans_in_use = vlan_usage.get(port.id, [])  # Lookup VLANs in use
 
         return {
@@ -1031,10 +1067,9 @@ class SDXClient:
             "Device": device,
             "Port #": port_number,
             "Status": port.status.value,
-            "VLAN Range": vlan_range,
-            "VLANs in Use": "; ".join(map(str, vlans_in_use))
-            if vlans_in_use
-            else "None",
+            "Entities": ", ".join(port.entities) if port.entities else "None",
+            "VLANs Available": vlan_range,
+            "VLANs in Use": "; ".join(map(str, vlans_in_use)) if vlans_in_use else "None",
         }
 
     def _parse_port_id(self, port_id: str) -> Tuple[str, str, str]:
@@ -1047,17 +1082,48 @@ class SDXClient:
         self._logger.error(f"Invalid port ID format: {port_id}")
         return port_id, "Invalid Format", "Invalid Format"
 
-    def _get_vlan_range(self, port: Port) -> str:
+    def _get_vlan_range(self, port: Port, vlans_in_use: Dict[str, List[int]]) -> str:
         """Extracts VLAN availability range from the Port services attribute."""
+
         try:
             vlan_data = port.services.get("l2vpn-ptp", {}).get("vlan_range", [])
+            in_use = set(vlans_in_use.get(port.id, []))
+
             if (
                 vlan_data
                 and isinstance(vlan_data, list)
                 and all(len(v) == 2 for v in vlan_data)
             ):
-                # Convert list of ranges to readable format
-                return ", ".join(f"{start}-{end}" for start, end in vlan_data)
+                available_vlans = []
+
+                for start, end in vlan_data:
+                    vlan_set = set(range(start, end + 1))  # Generate VLAN range
+                    vlan_set.difference_update(in_use)  
+
+                if vlan_set:
+                    sorted_vlans = sorted(vlan_set)
+                    range_start = range_end = sorted_vlans[0]
+
+                    for vlan in sorted_vlans[1:]:
+                        if vlan == range_end + 1:
+                            range_end = vlan  # Expand the range
+                        else:
+                            available_vlans.append(
+                                f"{range_start}-{range_end}"
+                                if range_start != range_end
+                                else str(range_start)
+                            )
+                            range_start = range_end = vlan  # Start a new range
+
+                    # Add the last range
+                    available_vlans.append(
+                        f"{range_start}-{range_end}"
+                        if range_start != range_end
+                        else str(range_start)
+                    )
+
+            return ", ".join(available_vlans) if available_vlans else "None"
+
         except Exception as e:
             self._logger.error(f"Error extracting VLAN range from port {port.id}: {e}")
 
@@ -1079,6 +1145,7 @@ class SDXClient:
                 for endpoint in l2vpn.get("endpoints", []):
                     port_id = endpoint.get("port_id")
                     vlan_value = endpoint.get("vlan")
+                    # print(vlan_value)
 
                     if port_id not in vlan_usage:
                         vlan_usage[port_id] = set()  # Initialize VLAN set
@@ -1086,8 +1153,8 @@ class SDXClient:
                     if isinstance(vlan_value, str) and ":" in vlan_value:
                         start, end = map(int, vlan_value.split(":"))
                         vlan_usage[port_id].update(range(start, end + 1))
-                    elif isinstance(vlan_value, int):
-                        vlan_usage[port_id].add(vlan_value)
+                    elif isinstance(vlan_value, str) and vlan_value.isdigit():
+                        vlan_usage[port_id].add(int(vlan_value))
 
             # Convert sets to sorted lists
             return {port_id: sorted(vlans) for port_id, vlans in vlan_usage.items()}
@@ -1111,6 +1178,8 @@ class SDXClient:
             # First, parse the raw response
             raw_topology = SDXTopologyResponse.from_json(response.json())
 
+            # print(f"DEBUG: get_topology() returned {type(raw_topology)}")
+
             # Convert it to processed topology
             return Topology(
                 name=raw_topology.name,
@@ -1127,13 +1196,107 @@ class SDXClient:
             self._logger.error(f"Failed to retrieve topology: {e}")
             raise SDXException(f"Failed to retrieve topology: {e}")
 
+    def search(self, search_term: str, search_type: str) -> pd.DataFrame:
+        """
+        Generalized search method for both entities and ports.
+
+        Args:
+            search_term (str): The search query (e.g., "Ampath", "FIU").
+            search_type (str): The type of search - either "ports" or "entities".
+
+        Returns:
+            pd.DataFrame: A DataFrame containing matching search results.
+        """
+        topology = self.get_topology()
+        vlan_usage = self._get_vlans_in_use()
+
+        # print("DEBUG: VLAN Usage:", vlan_usage)
+        # print("DEBUG: VLAN Usage Keys:", vlan_usage.keys())
+
+        if search_type == "ports":
+            filtered_ports = topology.search_ports(search_term)
+        elif search_type == "entities":
+            filtered_ports = topology.search_entities(search_term)
+        else:
+            raise ValueError("Invalid search type. Use 'ports' or 'entities'.")
+
+        # print("DEBUG: Filtered Ports:", [port.id for port in filtered_ports])
+
+        formatted_ports = [self._format_port(port, vlan_usage) for port in filtered_ports]
+
+        return pd.DataFrame(formatted_ports)
+
+    def interactive_search(self):
+        """
+        Interactive version of the search function that allows users to choose
+        between searching ports or entities using a dropdown and input box.
+
+        - If running in a **script**, it prompts for input.
+        - If running in **Jupyter Notebook**, it uses dropdowns & text fields.
+        """
+
+        def perform_search(search_term, search_type):
+            """Handles the search and displays results."""
+            search_term = search_term.strip()
+            if search_term:
+                self.search(search_term, search_type)
+
+        # Detect Jupyter Notebook
+        if "ipykernel" in sys.modules:
+            print("Interactive Mode Enabled: Select search type and enter a query.")
+
+            # Create dropdown for search type
+            search_type_dropdown = widgets.Dropdown(
+                options=["ports", "entities"],
+                value="ports",
+                description="Type:",
+                disabled=False,
+            )
+
+            # Create text input for search term
+            search_box = widgets.Text(
+                placeholder="Enter a search term...",
+                description="Search:",
+                continuous_update=False,
+            )
+
+            # Callback function
+            def on_search_change(change):
+                perform_search(search_box.value, search_type_dropdown.value)
+
+            # Bind function to both dropdown & text box
+            search_box.observe(on_search_change, names="value")
+            search_type_dropdown.observe(on_search_change, names="value")
+
+            # Display widgets
+            display(search_type_dropdown, search_box)
+
+        else:
+            # Terminal-based input
+            search_type = (
+                input("Enter search type ('ports' or 'entities'): ").strip().lower()
+            )
+            search_term = input("Enter search term: ").strip()
+            perform_search(search_term, search_type)
+
     def search_ports(self, search_term: str) -> pd.DataFrame:
         """
         Searches for ports based on a substring in the port name.
         """
         topology = self.get_topology()
         filtered_ports = topology.search_ports(search_term)
-        return pd.DataFrame([port.__dict__ for port in filtered_ports])
+
+        df = pd.DataFrame([port.__dict__ for port in filtered_ports])
+        df = df[df["nni"] == ""]
+        df = df.drop(columns=["nni"])
+        df = df.reset_index(drop=True)
+
+        # # Apply styling at the very end
+        # styled_df = df.style.set_table_attributes("style='display:inline; overflow-x: auto;'").hide_index()
+
+        # return styled_df
+
+        return df
 
     def search_entities(self, search_term: str) -> pd.DataFrame:
         """
@@ -1141,7 +1304,13 @@ class SDXClient:
         """
         topology = self.get_topology()
         filtered_ports = topology.search_entities(search_term)
-        return pd.DataFrame([port.__dict__ for port in filtered_ports])
+
+        df = pd.DataFrame([port.__dict__ for port in filtered_ports])
+        df = df[df["nni"] == ""]
+        df = df.drop(columns=["nni"])
+        df = df.reset_index(drop=True)
+
+        return df
 
     # Utility Methods
     def __str__(self) -> str:
