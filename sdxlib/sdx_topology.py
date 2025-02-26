@@ -6,8 +6,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, List, Dict, Any
 
-# from sdxlib.sdx_response import SDXTopologyResponse
-
 # Global Constants
 MODEL_VERSION = "2.0.0"
 
@@ -294,10 +292,12 @@ class Topology:
 
     def get_available_ports(self) -> List[Port]:
         """Returns a list of available ports that are UP and not NNI."""
+        # for port in self.port_lookup.values():
+        #     print(f"Port: {port.id}, NNI: '{port.nni}' (Type: {type(port.nni)})")
         return [
             port
             for port in self.port_lookup.values()
-            if port.status == Status.UP and not port.nni
+            if port.status == Status.UP and (not port.nni or port.nni.strip() == "")
         ]
 
     def search_ports(self, search_term: str) -> List[Port]:
