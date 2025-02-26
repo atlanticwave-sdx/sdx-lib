@@ -13,32 +13,71 @@ class TokenAuthentication:
     for secure communication with SDX Controller.
     """
 
-    def __init__(self, token_path=None, endpoint="sax.net/sdx/topology"):
+    def __init__(
+            self,
+            token_path="/home/fabric/.tokens.json",
+            proxy_hostname="sdxapi.atlanticwave-sdx.ai",
+            proxy_port="443",
+            endpoint="sax.net/sdx/topology",
+            slice_name="Slice-AWSDX"):
         """
-        Initializes the TokenAuthentication class with optional token path and endpoint.
+        Initializes the TokenAuthentication class with optional token path, endpoint, and slice name.
         If no path is provided, uses the environment variable FABRIC_TOKEN_LOCATION
         or defaults to /home/fabric/.tokens.json.
-        
+
         Args:
             token_path (str, optional): Path to the token file. Defaults to None.
             endpoint (str, optional): The API endpoint to validate the token against. Defaults to 'sax.net/sdx/topology'.
+            slice_name (str, optional): The name of the slice to initialize. Defaults to "Slice-AWSDX".
         """
         self.token_path = token_path or os.getenv("FABRIC_TOKEN_LOCATION", "/home/fabric/.tokens.json")
         self.project_id = None
         self.project_name = None
         self.fabric_ip = None
+        self.fabric_token = None
         self.token_header = None
         self.token_payload = None
         self.token_kid = None
         self.token_decoded = None
         self.token_iss = None
         self.token_aud = None
-        self.proxy_hostname = None
-        self.proxy_port = None
+        self.proxy_hostname = proxy_hostname
+        self.proxy_port = proxy_port
         self.endpoint = endpoint  # API endpoint for token validation
 
         # Initialize FablibManager to interact with the Fabric API
         self.fablib = fablib_manager()
+
+        # Assign Slice's Name (provided during initialization)
+        self.slice_name = slice_name
+        # Initialize the slice if slice_name is provided during initialization
+        if self.slice_name:
+            self.initialize_slice()
+
+    def initialize_slice(self):
+        """
+        Initialize the slice using the slice_name that was passed during initialization.
+        """
+        if not self.slice_name:
+            print("Error: Slice name not provided!")
+            return
+
+        # Initialize the slice using FablibManager
+        self.slice = self.fablib.get_slice(self.slice_name)
+        if self.slice:
+            print(f"Slice '{self.slice_name}' initialized.")
+        else:
+            print(f"Error: Could not initialize slice '{self.slice_name}'.")
+
+    def show_slice(self):
+        """
+        Show the details of the initialized slice.
+        """
+        if self.slice:
+            print(f"Showing details for slice: {self.slice_name}")
+            self.slice.show()
+        else:
+            print("Error: Slice is not initialized.")
 
     def load_token(self):
         """
@@ -50,7 +89,6 @@ class TokenAuthentication:
         """
         if not os.path.exists(self.token_path):
             print("Error: Token file not found!")
-            exit(1)
 
         print("FABRIC Token Path:", self.token_path)
 
@@ -59,22 +97,21 @@ class TokenAuthentication:
             with open(self.token_path, "r") as f:
                 token_data = json.load(f)
 
-            fabric_token = token_data.get("id_token", None)
-            if not fabric_token:
+            self.fabric_token = token_data.get("id_token", None)
+            if not self.fabric_token:
                 print("Error: Token is missing!")
-                exit(1)
 
             # Decode JWT header (to get 'kid')
-            self.token_header = jwt.get_unverified_header(fabric_token)
+            self.token_header = jwt.get_unverified_header(self.fabric_token)
             self.token_kid = self.token_header.get("kid", None)
 
             # Decode JWT token without verifying the signature (useful for debugging)
-            self.token_decoded = jwt.decode(fabric_token, options={"verify_signature": False})
+            self.token_decoded = jwt.decode(self.fabric_token, options={"verify_signature": False})
 
             self.token_iss = self.token_decoded.get("iss", None)  # Issuer
             self.token_aud = self.token_decoded.get("aud", None)  # Audience
 
-            print(f"FABRIC JWT Token: {fabric_token}")
+            print(f"FABRIC JWT Token: {self.fabric_token}")
             print("\n🔍 ✅ Decoded Token Claims:")
             for key, value in self.token_decoded.items():
                 print(f"   {key}: {value}")
@@ -104,14 +141,12 @@ class TokenAuthentication:
 
             if not self.project_id or not self.project_name:
                 print("Error: Project ID or Project Name not found!")
-                exit(1)
 
             print(f"Project ID: {self.project_id}")
             print(f"Project Name: {self.project_name}")
 
         except Exception as e:
             print(f"Error retrieving project info: {e}")
-            exit(1)
 
     def get_fabric_ip(self):
         """
@@ -176,14 +211,13 @@ class TokenAuthentication:
         """
         if not self.proxy_hostname or not self.proxy_port:
             print("Error: Proxy hostname and port are not set!")
-            exit(1)
 
         # Construct the URL using proxy_hostname and proxy_port
-        URL = f"http://{self.proxy_hostname}:{self.proxy_port}/api/"
+        URL = f"https://{self.proxy_hostname}:{self.proxy_port}/api/"
 
         headers = {
             "Content-Type": "application/json",  # Ensure JSON format
-            "Authorization": f"Bearer {self.token_decoded['id_token']}"  # Use the decoded token
+            "Authorization": f"Bearer {self.fabric_token}"  # Use the decoded token
         }
 
         try:
@@ -191,12 +225,11 @@ class TokenAuthentication:
             response = requests.get(URL + self.endpoint, headers=headers)
 
             # Log response status and raw text before parsing
-            print(f"🔹 HTTP Status: {response.status_code}")
+            print(f"HTTP Status: {response.status_code}")
 
             # Check if response is empty before trying to parse JSON
             if not response.text.strip():
                 print("Error: Response body is empty!")
-                exit(1)
 
         except requests.exceptions.RequestException as e:
             print(f"Request Error: {e}")
