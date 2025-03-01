@@ -5,7 +5,7 @@ from dacite import from_dict, Config
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
-from sdxlib.sdx_topology import *  
+from sdxlib.sdx_topology import *
 
 # Global Constants
 MODEL_VERSION = "2.0.0"
