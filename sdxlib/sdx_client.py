@@ -1,4 +1,3 @@
-
 import ipywidgets as widgets
 import json
 import logging
@@ -96,9 +95,11 @@ class SDXClient:
     #         return None
 
     # Set global Pandas display options
-    pd.set_option('display.max_colwidth', None)  # Show full column width without truncation
-    pd.set_option('display.width', 1000)  # Expand the display width to prevent wrapping
-    pd.set_option('display.max_columns', None)  # Ensure all columns are shown if needed
+    pd.set_option(
+        "display.max_colwidth", None
+    )  # Show full column width without truncation
+    pd.set_option("display.width", 1000)  # Expand the display width to prevent wrapping
+    pd.set_option("display.max_columns", None)  # Ensure all columns are shown if needed
 
     @property
     def base_url(self) -> str:
@@ -807,15 +808,17 @@ class SDXClient:
                 # Perform the empty check on the actual DataFrame, not the Styler object
                 if df.empty:
                     return "No L2VPNS currently exist."
-                
+
                 # Select ordered columns before applying styling
                 df = df[ordered_columns]
 
                 # Apply styling at the very end
-                styled_df = df.style.set_table_attributes("style='display:inline; overflow-x: auto;'").hide_index()
+                styled_df = df.style.set_table_attributes(
+                    "style='display:inline; overflow-x: auto;'"
+                ).hide_index()
 
                 return styled_df
-            
+
             elif format == "json":
                 return vars(sdx_response)
 
@@ -912,7 +915,7 @@ class SDXClient:
                     for service_id, sdx_response in l2vpns.items()
                 ]
                 return pd.DataFrame(node_info_list)
-            
+
             elif format == "json":
                 return {
                     service_id: vars(sdx_response)
@@ -1035,7 +1038,7 @@ class SDXClient:
 
             # Return in the requested format
             if format == "dataframe":
-            
+
                 df = pd.DataFrame(formatted_ports, index=None)
 
                 # Perform the empty check on the actual DataFrame, not the Styler object
@@ -1069,7 +1072,9 @@ class SDXClient:
             "Status": port.status.value,
             "Entities": ", ".join(port.entities) if port.entities else "None",
             "VLANs Available": vlan_range,
-            "VLANs in Use": "; ".join(map(str, vlans_in_use)) if vlans_in_use else "None",
+            "VLANs in Use": "; ".join(map(str, vlans_in_use))
+            if vlans_in_use
+            else "None",
         }
 
     def _parse_port_id(self, port_id: str) -> Tuple[str, str, str]:
@@ -1098,7 +1103,7 @@ class SDXClient:
 
                 for start, end in vlan_data:
                     vlan_set = set(range(start, end + 1))  # Generate VLAN range
-                    vlan_set.difference_update(in_use)  
+                    vlan_set.difference_update(in_use)
 
                 if vlan_set:
                     sorted_vlans = sorted(vlan_set)
@@ -1222,7 +1227,9 @@ class SDXClient:
 
         # print("DEBUG: Filtered Ports:", [port.id for port in filtered_ports])
 
-        formatted_ports = [self._format_port(port, vlan_usage) for port in filtered_ports]
+        formatted_ports = [
+            self._format_port(port, vlan_usage) for port in filtered_ports
+        ]
 
         return pd.DataFrame(formatted_ports)
 
