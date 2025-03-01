@@ -37,8 +37,8 @@ class Status(Enum):
     UP = "up"
     DOWN = "down"
     ERROR = "error"
-    MAINTENANCE = "maintenance"  # in spec but not topology
-    UNDER_PROVISIONING = "under provisioning"  # in spec but not topology
+    # MAINTENANCE = "maintenance"  # in spec but not topology
+    # UNDER_PROVISIONING = "under provisioning"  # in spec but not topology
 
 
 class State(Enum):
@@ -185,7 +185,7 @@ class Link:
     name: str
     id: str
     ports: List[str]
-    bandwidth: float
+    bandwidth: float = 0.0
     type: Optional[LinkType] = LinkType.INTRA
     residual_bandwidth: float = 100.0
     latency: float = 0.0
@@ -241,12 +241,14 @@ class Topology:
 
     name: str
     id: str
-    version: int
+    version: str
     timestamp: str
-    model_version: str = MODEL_VERSION
+    # Adding optional to the str. Issue #418 on SDXController has been filed to correct this such that model_version only supports "2.0.0"
+    model_version: Optional[str] = MODEL_VERSION or None
     nodes: List[Node] = field(default_factory=list)
     links: List[Link] = field(default_factory=list)
     services: Optional[List[str]] = field(default_factory=lambda: ["l2vpn-ptp"])
+
     port_lookup: Dict[str, Port] = field(default_factory=dict)
 
     def __post_init__(self):
