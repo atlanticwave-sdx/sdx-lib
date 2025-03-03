@@ -524,6 +524,11 @@ class SDXClient:
             SDXException: If the L2VPN creation fails.
             ValueError: If required attributes are missing.
         """
+        # Debugging: Log current state
+        self._logger.debug(f"Base URL: {self.base_url}")
+        self._logger.debug(f"Name: {self.name}")
+        self._logger.debug(f"Endpoints: {self.endpoints}")
+
         if not self.base_url or not self.name or not self.endpoints:
             raise ValueError(
                 "Creating L2VPN requires the base URL, name, and endpoints at minumum."
