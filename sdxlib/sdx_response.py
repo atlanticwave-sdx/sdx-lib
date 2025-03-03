@@ -1,3 +1,4 @@
+import json
 from typing import Dict, List, Optional, Union
 
 
@@ -54,48 +55,42 @@ class SDXResponse:
     def __eq__(self, other):
         if not isinstance(other, SDXResponse):
             return NotImplemented
-        return (
-            self.service_id == other.service_id
-            and self.ownership == other.ownership
-            and self.creation_date == other.creation_date
-            and self.archived_date == other.archived_date
-            and self.status == other.status
-            and self.state == other.state
-            and self.counters_location == other.counters_location
-            and self.last_modified == other.last_modified
-            and self.current_path == other.current_path
-            and self.oxp_service_ids == other.oxp_service_ids
-        )
+        return self.__dict__ == other.__dict__
 
     def __str__(self):
-        current_path_str = (
-            self.current_path[0]
-            if isinstance(self.current_path, list) and len(self.current_path) == 1
-            else str(self.current_path)
-        )
 
-        oxp_service_ids_str = (
+        # Format lists and dictionaries using json.dumps for indentation
+        formatted_endpoints = (
+            json.dumps(self.endpoints, indent=4) if self.endpoints else "None"
+        )
+        formatted_qos_metrics = (
+            json.dumps(self.qos_metrics, indent=4) if self.qos_metrics else "None"
+        )
+        formatted_notifications = (
+            json.dumps(self.notifications, indent=4) if self.notifications else "None"
+        )
+        formatted_oxp_service_ids = json.dumps(
             [oxp["id"] for oxp in self.oxp_service_ids]
             if isinstance(self.oxp_service_ids, list)
-            else str(self.oxp_service_ids)
+            else self.oxp_service_ids,
+            indent=4,
         )
 
         return (
             "L2VPN Response:\n"
-            f"        service_id: {self.service_id}\n"
-            f"        name: {self.name}\n"
-            f"        endpoints: {self.endpoints}\n"
-            f"        description: {self.description}\n"
-            f"        scheduling: {self.scheduling}\n"
-            f"        qos_metrics: {self.qos_metrics}\n"
-            f"        notifications: {self.notifications}\n"
-            f"        ownership: {self.ownership}\n"
-            f"        creation_date: {self.creation_date}\n"
-            f"        archived_date: {self.archived_date}\n"
-            f"        status: {self.status}\n"
-            f"        state: {self.state}\n"
-            f"        counters_location: {self.counters_location}\n"
-            f"        last_modified: {self.last_modified}\n"
-            f"        current_path: {current_path_str}\n"
-            f"        oxp_service_ids: {oxp_service_ids_str}"
+            f"        service_id: '{self.service_id}'\n"
+            f"        name: '{self.name}'\n"
+            f"        endpoints: {formatted_endpoints}\n"
+            f"        description: '{self.description}'\n"
+            f"        qos_metrics: {formatted_qos_metrics}\n"
+            f"        notifications: {formatted_notifications}\n"
+            f"        ownership: '{self.ownership}'\n"
+            f"        creation_date: '{self.creation_date}'\n"
+            f"        archived_date: '{self.archived_date}'\n"
+            f"        status: '{self.status}'\n"
+            f"        state: '{self.state}'\n"
+            f"        counters_location: '{self.counters_location}'\n"
+            f"        last_modified: '{self.last_modified}'\n"
+            f"        current_path: {json.dumps(self.current_path, indent=4)}\n"
+            f"        oxp_service_ids: {formatted_oxp_service_ids}"
         )

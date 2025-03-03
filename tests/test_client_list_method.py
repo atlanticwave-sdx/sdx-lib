@@ -1,6 +1,7 @@
 import requests
 import unittest
 from unittest.mock import patch, Mock
+from pandas.testing import assert_frame_equal
 from sdxlib.sdx_client import SDXClient
 from sdxlib.sdx_exception import SDXException
 from sdxlib.sdx_response import SDXResponse
@@ -25,24 +26,27 @@ class TestSDXClient(unittest.TestCase):
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            TEST_SERVICE_ID: {"service_id": TEST_SERVICE_ID, "name": "Test L2VPN",}
+            TEST_SERVICE_ID: {
+                "service_id": TEST_SERVICE_ID,
+                "name": "Test",
+                "endpoints": TEST_ENDPOINTS,
+            }
         }
         mock_get.return_value = mock_response
-        mock_logger = Mock()
 
-        mock_get_logger.return_value = mock_logger
-        client = SDXClient(
-            base_url=TEST_URL,
-            name=TEST_NAME,
-            endpoints=TEST_ENDPOINTS,
-            logger=mock_logger,
-        )
+        client = SDXClient(base_url=TEST_URL)
+
         result = client.get_l2vpn(TEST_SERVICE_ID)
-        self.assertEqual(result.service_id, TEST_SERVICE_ID)
-        self.assertEqual(result.name, "Test L2VPN")
-        mock_get_logger().info.assert_called_with(
-            f"L2VPN retrieval request sent to {TEST_URL}/l2vpn/1.0/{TEST_SERVICE_ID}."
+
+        # Check correct URL was used
+        expected_url = f"{TEST_URL}/l2vpn/1.0/{TEST_SERVICE_ID}"
+        mock_get.assert_called_with(
+            expected_url, auth=(None, None), verify=True, timeout=120
         )
+
+        # Check correct data retrieval
+        self.assertEqual(result["service_id"].iloc[0], TEST_SERVICE_ID)
+        self.assertEqual(result["name"].iloc[0], "Test")
 
     @patch("requests.get")
     @patch("logging.getLogger")
@@ -51,7 +55,11 @@ class TestSDXClient(unittest.TestCase):
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            TEST_SERVICE_ID: {"service_id": TEST_SERVICE_ID, "name": "Test L2VPN",}
+            TEST_SERVICE_ID: {
+                "service_id": TEST_SERVICE_ID,
+                "name": "Test L2VPN",
+                "endpoints": TEST_ENDPOINTS,
+            }
         }
         mock_get.return_value = mock_response
         mock_logger = Mock()
@@ -68,7 +76,10 @@ class TestSDXClient(unittest.TestCase):
         expected_message = (
             f"L2VPN retrieval request sent to {TEST_URL}/l2vpn/1.0/{TEST_SERVICE_ID}."
         )
-        mock_get_logger().info.assert_called_with(expected_message)
+        expected_full_response = f"Full response: {mock_response.json.return_value}"
+
+        mock_logger.info.assert_any_call(expected_message)
+        mock_logger.info.assert_any_call(expected_full_response)
 
     @patch("requests.get")
     def test_get_l2vpn_404_error(self, mock_get):
@@ -76,17 +87,15 @@ class TestSDXClient(unittest.TestCase):
         mock_response = Mock()
         mock_response.status_code = 404
         mock_response.raise_for_status.side_effect = HTTPError(response=mock_response)
+        mock_response.json.return_value = {"error": "Service not found"}
         mock_get.return_value = mock_response
 
-        client = SDXClient(
-            base_url=TEST_URL,
-            name=TEST_NAME,
-            endpoints=TEST_ENDPOINTS,
-            logger=mock_response,
-        )
+        client = SDXClient(base_url=TEST_URL)
 
-        with self.assertRaises(SDXException):
+        with self.assertRaises(SDXException) as context:
             client.get_l2vpn("invalid_id")
+
+        self.assertIn("Service ID not found", str(context.exception))
 
     @patch("requests.get")
     def test_get_l2vpn_401_error(self, mock_get):
@@ -195,24 +204,71 @@ class TestSDXClient(unittest.TestCase):
 
         # Assert the URL was called correctly
         expected_url = f"{TEST_URL}/l2vpn/1.0/{TEST_SERVICE_ID}"
-        mock_get.assert_called_with(expected_url, auth=(None,None), verify=True, timeout=120)
+        mock_get.assert_called_with(
+            expected_url, auth=(None, None), verify=True, timeout=120
+        )
 
         # Assert the result is as expected
-        self.assertEqual(result.service_id, TEST_SERVICE_ID)
-        self.assertEqual(result.name, "VLAN between AMPATH/300 and TENET/150")
+        self.assertEqual(result["service_id"].iloc[0], TEST_SERVICE_ID)
+        self.assertEqual(
+            result["name"].iloc[0], "VLAN between AMPATH/300 and TENET/150"
+        )
 
     @patch("requests.get")
     @patch("logging.getLogger")
     def test_get_all_l2vpns_active(self, mock_get_logger, mock_get):
         """Test retrieving active L2VPNs."""
+
+        self.maxDiff = None
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = MOCK_RESPONSE
+        mock_get.return_value = mock_response
+
+        client = SDXClient(base_url=TEST_URL)
+
+        result = client.get_all_l2vpns(archived=False, format="json")
+
+        expected_result = {
+            service_id: data
+            for service_id, data in mock_response.json.return_value.items()
+        }
+
+        self.assertEqual(result, expected_result)
+
+        mock_get_logger().info.assert_called_with(
+            f"Retrieved L2VPNs successfully: {MOCK_RESPONSE}"
+        )
+
+    @patch("requests.get")
+    @patch("logging.getLogger")
+    def test_get_all_l2vpns_archived(self, mock_get_logger, mock_get):
+        """Test retrieving archived L2VPNs."""
+
+        self.maxDiff = None
+
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
             TEST_SERVICE_ID: {
                 "service_id": TEST_SERVICE_ID,
+                "name": "VLAN between AMPATH/300 and TENET/150",
+                "endpoints": [
+                    {"port_id": "urn:sdx:port:tenet.ac.za:Tenet03:50", "vlan": "150"},
+                    {"port_id": "urn:sdx:port:ampath.net:Ampath3:50", "vlan": "300"},
+                ],
+                "description": "This is an example to demonstrate a L2VPN with optional attributes",
+                "qos_metrics": {
+                    "min_bw": {"value": 5, "strict": False},
+                    "max_delay": {"value": 150, "strict": True},
+                },
+                "notifications": [
+                    {"email": "user@domain.com"},
+                    {"email": "user2@domain2.com"},
+                ],
                 "ownership": "user1",
                 "creation_date": "20240522T00:00:00Z",
-                "archived_date": "0",
+                "archived_date": "20240101T00:00:00Z",
                 "status": "up",
                 "state": "enabled",
                 "counters_location": "https://my.aw-sdx.net/l2vpn/7cdf23e8978c",
@@ -220,51 +276,25 @@ class TestSDXClient(unittest.TestCase):
                 "current_path": ["urn:sdx:link:tenet.ac.za:LinkToAmpath"],
                 "oxp_service_ids": {
                     "ampath.net": ["c73da8e1"],
-                    "Tenet.ac.za": ["5d034620"],
+                    "tenet.ac.za": ["5d034620"],
                 },
+                "scheduling": None,
             }
         }
+
         mock_get.return_value = mock_response
+        client = SDXClient(base_url=TEST_URL)
+        result = client.get_all_l2vpns(archived=False, format="json")
 
-        client = SDXClient(base_url=TEST_URL, name=TEST_NAME, endpoints=TEST_ENDPOINTS)
-
-        result = client.get_all_l2vpns(archived=False)
-
-        self.assertEqual(
-            result,
-            {
-                service_id: SDXResponse(data)
-                for service_id, data in mock_response.json.return_value.items()
-            },
-        )
-
-        mock_get_logger().info.assert_called_with(
-            "Retrieved L2VPNs successfully: {'8344657b-2466-4735-9a21-143643073865': {'service_id': '8344657b-2466-4735-9a21-143643073865', 'ownership': 'user1', 'creation_date': '20240522T00:00:00Z', 'archived_date': '0', 'status': 'up', 'state': 'enabled', 'counters_location': 'https://my.aw-sdx.net/l2vpn/7cdf23e8978c', 'last_modified': '0', 'current_path': ['urn:sdx:link:tenet.ac.za:LinkToAmpath'], 'oxp_service_ids': {'ampath.net': ['c73da8e1'], 'Tenet.ac.za': ['5d034620']}}}"
-        )
-
-    @patch("requests.get")
-    @patch("logging.getLogger")
-    def test_get_all_l2vpns_archived(self, mock_get_logger, mock_get):
-        """Test retrieving archived L2VPNs."""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            TEST_SERVICE_ID: {
-                "service_id": TEST_SERVICE_ID,
-                "archived_date": "20240101T00:00:00Z",
-            }
-        }
-        mock_get.return_value = mock_response
-        client = SDXClient(base_url=TEST_URL, name=TEST_NAME, endpoints=TEST_ENDPOINTS,)
-        result = client.get_all_l2vpns(archived=True)
         expected_result = {
-            service_id: SDXResponse(data)
+            service_id: data
             for service_id, data in mock_response.json.return_value.items()
         }
+
         self.assertEqual(result, expected_result)
 
         mock_get_logger().info.assert_called_with(
-            "Retrieved L2VPNs successfully: {'8344657b-2466-4735-9a21-143643073865': {'service_id': '8344657b-2466-4735-9a21-143643073865', 'archived_date': '20240101T00:00:00Z'}}"
+            "Retrieved L2VPNs successfully: {'8344657b-2466-4735-9a21-143643073865': {'service_id': '8344657b-2466-4735-9a21-143643073865', 'name': 'VLAN between AMPATH/300 and TENET/150', 'endpoints': [{'port_id': 'urn:sdx:port:tenet.ac.za:Tenet03:50', 'vlan': '150'}, {'port_id': 'urn:sdx:port:ampath.net:Ampath3:50', 'vlan': '300'}], 'description': 'This is an example to demonstrate a L2VPN with optional attributes', 'qos_metrics': {'min_bw': {'value': 5, 'strict': False}, 'max_delay': {'value': 150, 'strict': True}}, 'notifications': [{'email': 'user@domain.com'}, {'email': 'user2@domain2.com'}], 'ownership': 'user1', 'creation_date': '20240522T00:00:00Z', 'archived_date': '20240101T00:00:00Z', 'status': 'up', 'state': 'enabled', 'counters_location': 'https://my.aw-sdx.net/l2vpn/7cdf23e8978c', 'last_modified': '0', 'current_path': ['urn:sdx:link:tenet.ac.za:LinkToAmpath'], 'oxp_service_ids': {'ampath.net': ['c73da8e1'], 'tenet.ac.za': ['5d034620']}, 'scheduling': None}}"
         )
 
     @patch("requests.get")
@@ -293,8 +323,8 @@ class TestSDXClient(unittest.TestCase):
 
         client = SDXClient(base_url=TEST_URL, name=TEST_NAME, endpoints=TEST_ENDPOINTS,)
 
-        result = client.get_all_l2vpns()
-        self.assertEqual(result, {})
+        result = client.get_all_l2vpns(format="dataframe")
+        self.assertTrue(result.empty)
 
     @patch("requests.get")
     def test_get_all_l2vpns_request_exception(self, mock_get):
@@ -333,7 +363,7 @@ class TestSDXClient(unittest.TestCase):
 
         client = SDXClient(base_url=TEST_URL, name=TEST_NAME, endpoints=TEST_ENDPOINTS,)
 
-        result = client.get_all_l2vpns()
+        result = client.get_all_l2vpns(archived=False, format="json")
         self.assertEqual(result, {})
 
 

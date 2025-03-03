@@ -6,24 +6,41 @@ from sdxlib.sdx_client import SDXClient
 class TestSDXClientStringRepresentation(unittest.TestCase):
     def test_str_method(self):
         """Test the string output of the SDXClient.__str__ method."""
+        self.maxDiff = None
         client = SDXClient(
             base_url="http://fake-api-url.com",
             name="TestClient",
-            endpoints=[{"type": "endpoint1"}, {"type": "endpoint2"}],
+            endpoints=[
+                {
+                    "port_id": "urn:sdx:port:test-oxp_url:test-node_name:test-port_name",
+                    "vlan": "100",
+                },
+                {
+                    "port_id": "urn:sdx:port:test-oxp_url:test-node_name:test-port_name2",
+                    "vlan": "200",
+                },
+            ],
             description="Test description",
             notifications=[{"email": "test@example.com"}],
             scheduling={
-                "start_time": "2024-01-01T10:00:00",
-                "end_time": "2024-01-01T12:00:00",
+                "start_time": "2024-07-04T10:00:00Z",
+                "end_time": "2024-07-05T18:00:00Z",
             },
-            qos_metrics={"metric1": {"threshold": 5, "enabled": True}},
+            qos_metrics={
+                "min_bw": {"value": 10, "strict": False},
+                "max_delay": {"value": 200, "strict": True},
+            },
         )
 
         expected_str = (
-            "SDXClient(name=TestClient, endpoints=[{'type': 'endpoint1'}, {'type': 'endpoint2'}], "
-            "description=Test description, notifications=[{'email': 'test@example.com'}], "
-            "scheduling={'start_time': '2024-01-01T10:00:00', 'end_time': '2024-01-01T12:00:00'}, "
-            "qos_metrics={'metric1': {'threshold': 5, 'enabled': True}}, base url=http://fake-api-url.com"
+            "SDXClient(name=TestClient, "
+            "endpoints=[{'port_id': 'urn:sdx:port:test-oxp_url:test-node_name:test-port_name', 'vlan': '100'}, "
+            "{'port_id': 'urn:sdx:port:test-oxp_url:test-node_name:test-port_name2', 'vlan': '200'}], "
+            "description=Test description, "
+            "notifications=[{'email': 'test@example.com'}], "
+            "scheduling={'start_time': '2024-07-04T10:00:00Z', 'end_time': '2024-07-05T18:00:00Z'}, "
+            "qos_metrics={'min_bw': {'value': 10, 'strict': False}, 'max_delay': {'value': 200, 'strict': True}}, "
+            "base_url=http://fake-api-url.com)"
         )
 
         self.assertEqual(str(client), expected_str)
@@ -33,21 +50,37 @@ class TestSDXClientStringRepresentation(unittest.TestCase):
         client = SDXClient(
             base_url="http://fake-api-url.com",
             name="TestClient",
-            endpoints=[{"type": "endpoint1"}, {"type": "endpoint2"}],
+            endpoints=[
+                {
+                    "port_id": "urn:sdx:port:test-oxp_url:test-node_name:test-port_name",
+                    "vlan": "100",
+                },
+                {
+                    "port_id": "urn:sdx:port:test-oxp_url:test-node_name:test-port_name2",
+                    "vlan": "200",
+                },
+            ],
             description="Test description",
             notifications=[{"email": "test@example.com"}],
             scheduling={
-                "start_time": "2024-01-01T10:00:00",
-                "end_time": "2024-01-01T12:00:00",
+                "start_time": "2024-07-04T10:00:00Z",
+                "end_time": "2024-07-05T18:00:00Z",
             },
-            qos_metrics={"metric1": {"threshold": 5, "enabled": True}},
+            qos_metrics={
+                "min_bw": {"value": 10, "strict": False},
+                "max_delay": {"value": 200, "strict": True},
+            },
         )
 
         expected_repr = (
-            "SDXClient(name=TestClient, endpoints=[{'type': 'endpoint1'}, {'type': 'endpoint2'}], "
-            "description=Test description, notifications=[{'email': 'test@example.com'}], "
-            "scheduling={'start_time': '2024-01-01T10:00:00', 'end_time': '2024-01-01T12:00:00'}, "
-            "qos_metrics={'metric1': {'threshold': 5, 'enabled': True}}, base url=http://fake-api-url.com"
+            "SDXClient(name=TestClient, "
+            "endpoints=[{'port_id': 'urn:sdx:port:test-oxp_url:test-node_name:test-port_name', 'vlan': '100'}, "
+            "{'port_id': 'urn:sdx:port:test-oxp_url:test-node_name:test-port_name2', 'vlan': '200'}], "
+            "description=Test description, "
+            "notifications=[{'email': 'test@example.com'}], "
+            "scheduling={'start_time': '2024-07-04T10:00:00Z', 'end_time': '2024-07-05T18:00:00Z'}, "
+            "qos_metrics={'min_bw': {'value': 10, 'strict': False}, 'max_delay': {'value': 200, 'strict': True}}, "
+            "base_url=http://fake-api-url.com)"
         )
 
         self.assertEqual(repr(client), expected_repr)
