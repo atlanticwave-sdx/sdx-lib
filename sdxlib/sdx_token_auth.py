@@ -51,7 +51,7 @@ class TokenAuthentication:
         if not os.path.exists(self.token_path):
             print("Error: Token file not found!")
 
-        print("FABRIC Token Path:", self.token_path)
+        # print("FABRIC Token Path:", self.token_path)
 
         try:
             # Read the token JSON file
@@ -72,10 +72,11 @@ class TokenAuthentication:
             self.token_iss = self.token_decoded.get("iss", None)  # Issuer
             self.token_aud = self.token_decoded.get("aud", None)  # Audience
 
-            print(f"FABRIC JWT Token: {self.fabric_token}")
-            print("Decoded Token Claims:")
-            for key, value in self.token_decoded.items():
-                print(f"   {key}: {value}")
+            # print(f"FABRIC JWT Token: {self.fabric_token}")
+            # print("Decoded Token Claims:")
+            # for key, value in self.token_decoded.items():
+            #    print(f"   {key}: {value}")
+            print("The Token has been successfully decoded!!!") 
 
         except json.JSONDecodeError:
             print("Error: Failed to decode token JSON file!")

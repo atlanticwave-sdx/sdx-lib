@@ -46,7 +46,7 @@ class TestSDXClient(unittest.TestCase):
     # Checks for valid name passes.
     def test_valid_name(self):
         """Checks that a valid name is accepted."""
-        self.assertEqual(self.client.name, "Test L2VPN")
+        self.assertEqual(self.client.name, "Test_L2VPN")
 
 
 # Run the tests

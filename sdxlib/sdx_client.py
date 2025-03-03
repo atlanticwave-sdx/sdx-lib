@@ -72,18 +72,6 @@ class SDXClient:
         self._logger = logger or logging.getLogger(__name__)
         self._request_cache = {}
 
-    #     self.token = self._load_fabric_token()
-
-    # def _load_fabric_token(self) -> Optional[str]:
-    #     token_path = os.getenv("FABRIC_TOKEN_LOCATION", "/home/fabric/.tokens.json")
-    #     try:
-    #         with open(token_path, "r") as f:
-    #             token_data = json.load(f)
-    #             return token_data.get("token")
-    #     except (FileNotFoundError, json.JSONDecodeError) as e:
-    #         self._logger.error(f"Could not load FABRIC token: {e}")
-    #         return None
-
     @property
     def base_url(self) -> str:
         """Getter for base_url attribute."""
@@ -486,11 +474,11 @@ class SDXClient:
         value_dict.get("strict", False)
 
     ### SDX Client Methods
-    def create_l2vpn(self) -> SDXResponse:
+    def create_l2vpn(self) -> dict:
         """Creates an L2VPN.
 
         Returns:
-            SDXResponse: Parsed response object from the SDX API.
+            dict: Dictionary containing the service_id if successful.
 
         Raises:
             SDXException: If the L2VPN creation fails.
@@ -539,7 +527,7 @@ class SDXClient:
 
         if cached_data:
             _, response_json = cached_data
-            return SDXResponse(response_json)
+            return {"service_id": response_json.get("service_id")}
 
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=120)
@@ -548,9 +536,8 @@ class SDXClient:
             cached_data = (payload, response_json)
             self._request_cache[cache_key] = cached_data
             self._logger.info(
-                f"L2VPN created successfully with service_id: {response_json['service_id']}"
+                f"L2VPN created successfully with service_id: {response_json.get('service_id', 'UNKNOWN')}"
             )
-            sdx_response = SDXResponse(response_json)
             return {"service_id": response_json.get("service_id")}
         except HTTPError as e:
             status_code = e.response.status_code
@@ -599,7 +586,7 @@ class SDXClient:
         notifications: Optional[Dict[str, Union[str, bool]]] = None,
         scheduling: Optional[Dict[str, str]] = None,
         qos_metrics: Optional[Dict[str, Dict[str, Union[int, bool]]]] = None,
-    ) -> SDXResponse:
+    ) -> Optional[Dict[str, str]]:
         """Updates an existing L2VPN using the provided service ID and keyword arguments.
 
         Args:
@@ -613,7 +600,7 @@ class SDXClient:
             qos_metrics (Optional[Dict[str, Dict[str, Union[int, bool]]]]): The new QoS metrics.
 
         Returns:
-            SDXResponse: Parsed response object from the SDX API.
+            Optional[Dict[str, str]]: A confirmation message with teh service_id on success, or raises an error on failure.
 
         Raises:
             SDXException: If the API request fails.
@@ -666,9 +653,10 @@ class SDXClient:
                 self._logger.info(
                     f"L2VPN with service_id {service_id} was successfully updated."
                 )
-                return SDXResponse(
-                    {"description": "L2VPN Service Modified", "service_id": service_id}
-                )
+                return {
+                    "description": "L2VPN Service Modified",
+                    "service_id": service_id,
+                }
 
         except HTTPError as e:
             status_code = e.response.status_code
@@ -775,6 +763,7 @@ class SDXClient:
                     "counters_location",
                     "last_modified",
                     "current_path",
+                    "oxp_service_ids",
                 ]
 
                 df = pd.DataFrame(node_info_list)
