@@ -31,7 +31,7 @@ class TestSDXClient(unittest.TestCase):
             logger=mock_logger,
         )
         response = client.create_l2vpn()
-        self.assertEqual(response.service_id, "123")
+        self.assertEqual(response["service_id"], "123")
         mock_post.assert_called_once_with(
             f"{TEST_URL}/l2vpn/1.0",
             json={
@@ -39,6 +39,7 @@ class TestSDXClient(unittest.TestCase):
                 "endpoints": TEST_ENDPOINTS,
                 "description": "Test Description",
             },
+            auth=(None, None),
             timeout=120,
         )
         mock_logger.debug.assert_called_once_with(
@@ -66,7 +67,7 @@ class TestSDXClient(unittest.TestCase):
         with self.assertRaises(SDXException) as context:
             client.create_l2vpn()
         self.assertEqual(
-            str(context.exception),
+            context.exception.message,
             "An error occurred while creating L2VPN: Connection error",
         )
 
@@ -75,12 +76,12 @@ class TestSDXClient(unittest.TestCase):
 
     def test_create_l2vpn_url_required(self):
         """Tests that base_url is required for L2VPN creation."""
-        client = SDXClient(name=TEST_NAME, endpoints=TEST_ENDPOINTS,)
         with self.assertRaises(ValueError) as context:
-            client.create_l2vpn()
+            SDXClient(
+                name=TEST_NAME, endpoints=TEST_ENDPOINTS,
+            )
         self.assertEqual(
-            str(context.exception),
-            "Creating L2VPN requires the base URL, name, and endpoints at minumum.",
+            str(context.exception), "Base URL must be a non-empty string.",
         )
 
     def test_create_l2vpn_name_required(self):
@@ -124,7 +125,7 @@ class TestSDXClient(unittest.TestCase):
         with self.assertRaises(SDXException) as context:
             client.create_l2vpn()
         self.assertEqual(
-            str(context.exception),
+            context.exception.message,
             "Request does not have a valid JSON or body is incomplete/incorrect",
         )
 
@@ -145,7 +146,7 @@ class TestSDXClient(unittest.TestCase):
         with self.assertRaises(SDXException) as context:
             client.create_l2vpn()
         self.assertEqual(
-            str(context.exception), "The request to create the L2VPN timed out."
+            context.exception.message, "The request to create the L2VPN timed out."
         )
         mock_logger.error.assert_called_once_with(
             "The request to create the L2VPN timed out."
@@ -168,7 +169,7 @@ class TestSDXClient(unittest.TestCase):
         with self.assertRaises(SDXException) as context:
             client.create_l2vpn()
         self.assertEqual(
-            str(context.exception),
+            context.exception.message,
             "An error occurred while creating L2VPN: Connection error",
         )
         mock_logger.error.assert_called_once_with(

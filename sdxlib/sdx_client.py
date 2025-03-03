@@ -1,4 +1,3 @@
-from collections import namedtuple
 import logging
 import pandas as pd
 import re
@@ -41,10 +40,10 @@ class SDXClient:
     def __init__(
         self,
         base_url: Optional[str] = None,
-        http_username=None,
-        http_password=None,
         name: Optional[str] = None,
         endpoints: Optional[List[Dict[str, str]]] = None,
+        http_username=None,
+        http_password=None,
         description: Optional[str] = None,
         notifications: Optional[List[Dict[str, str]]] = None,
         scheduling: Optional[Dict[str, str]] = None,
@@ -64,7 +63,7 @@ class SDXClient:
         - scheduling (Optional[Dict[str, str]]): Scheduling configuration (default: None).
         - qos_metrics (Optional[Dict[str, str]]): Quality of service metrics (default: None).
         """
-        
+
         self.base_url = base_url
         self.http_username = http_username
         self.http_password = http_password
@@ -76,6 +75,18 @@ class SDXClient:
         self.qos_metrics = qos_metrics
         self._logger = logger or logging.getLogger(__name__)
         self._request_cache = {}
+
+    #     self.token = self._load_fabric_token()
+
+    # def _load_fabric_token(self) -> Optional[str]:
+    #     token_path = os.getenv("FABRIC_TOKEN_LOCATION", "/home/fabric/.tokens.json")
+    #     try:
+    #         with open(token_path, "r") as f:
+    #             token_data = json.load(f)
+    #             return token_data.get("token")
+    #     except (FileNotFoundError, json.JSONDecodeError) as e:
+    #         self._logger.error(f"Could not load FABRIC token: {e}")
+    #         return None
 
     @property
     def base_url(self) -> str:
@@ -513,6 +524,11 @@ class SDXClient:
             SDXException: If the L2VPN creation fails.
             ValueError: If required attributes are missing.
         """
+        # Debugging: Log current state
+        self._logger.debug(f"Base URL: {self.base_url}")
+        self._logger.debug(f"Name: {self.name}")
+        self._logger.debug(f"Endpoints: {self.endpoints}")
+
         if not self.base_url or not self.name or not self.endpoints:
             raise ValueError(
                 "Creating L2VPN requires the base URL, name, and endpoints at minumum."
@@ -577,6 +593,7 @@ class SDXClient:
                 409: "L2VPN Service already exists",
                 410: "Can't fulfill the strict QoS requirements",
                 411: "Scheduling not possible",
+                412: "No path available between endpoints",
                 422: "Attribute not supported by the SDX-LC/OXPO",
             }
             error_message = method_messages.get(status_code, "Unknown error occurred.")
@@ -890,6 +907,7 @@ class SDXClient:
             method_messages = {
                 200: "OK",
             }
+
             error_message = method_messages.get(status_code, "Unknown error occurred.")
             self._logger.error(
                 f"Failed to retrieve L2VPNs. Status code: {status_code}: {error_message}"
@@ -944,7 +962,7 @@ class SDXClient:
 
             error_message = method_messages.get(status_code, "Unknown error occurred.")
             self._logger.error(
-                f"Failed to retrieve L2VPN. Status code: {status_code}: {error_message}"
+                f"Failed to delete L2VPN. Status code: {status_code}: {error_message}"
             )
 
             raise SDXException(
@@ -1042,7 +1060,7 @@ class SDXClient:
             f"SDXClient(name={self.name}, endpoints={self.endpoints}, "
             f"description={self.description}, notifications={self.notifications}, "
             f"scheduling={self.scheduling}, qos_metrics={self.qos_metrics}, "
-            f"base url={self.base_url}"
+            f"base_url={self.base_url})"
         )
 
     def __repr__(self) -> str:
@@ -1051,5 +1069,5 @@ class SDXClient:
             f"SDXClient(name={self.name}, endpoints={self.endpoints}, "
             f"description={self.description}, notifications={self.notifications}, "
             f"scheduling={self.scheduling}, qos_metrics={self.qos_metrics}, "
-            f"base url={self.base_url}"
+            f"base_url={self.base_url})"
         )
