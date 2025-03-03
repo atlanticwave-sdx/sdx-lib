@@ -17,7 +17,7 @@ class TokenAuthentication:
             token_path="/home/fabric/.tokens.json",
             proxy_hostname="sdxapi.atlanticwave-sdx.ai",
             proxy_port="443",
-            endpoint="sax.net/sdx/topology"):
+            endpoint="topology"):
         """
         Initializes the TokenAuthentication class with optional token path, endpoint, and slice name.
         If no path is provided, uses the environment variable FABRIC_TOKEN_LOCATION
