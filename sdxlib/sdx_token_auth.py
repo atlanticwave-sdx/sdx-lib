@@ -12,12 +12,7 @@ class TokenAuthentication:
     for secure communication with SDX Controller.
     """
 
-    def __init__(
-            self,
-            token_path="/home/fabric/.tokens.json",
-            proxy_hostname="sdxapi.atlanticwave-sdx.ai",
-            proxy_port="443",
-            endpoint="topology"):
+    def __init__(self):
         """
         Initializes the TokenAuthentication class with optional token path, endpoint, and slice name.
         If no path is provided, uses the environment variable FABRIC_TOKEN_LOCATION
@@ -28,7 +23,7 @@ class TokenAuthentication:
             endpoint (str, optional): The API endpoint to validate the token against. Defaults to 'sax.net/sdx/topology'.
             slice_name (str, optional): The name of the slice to initialize. Defaults to "Slice-AWSDX".
         """
-        self.token_path = token_path or os.getenv("FABRIC_TOKEN_LOCATION", "/home/fabric/.tokens.json")
+        self.token_path = "/home/fabric/.tokens.json"
         self.fabric_token = None
         self.token_header = None
         self.token_payload = None
@@ -36,9 +31,9 @@ class TokenAuthentication:
         self.token_decoded = None
         self.token_iss = None
         self.token_aud = None
-        self.proxy_hostname = proxy_hostname
-        self.proxy_port = proxy_port
-        self.endpoint = endpoint  # API endpoint for token validation
+        self.proxy_hostname = "sdxapi.atlanticwave-sdx.ai"
+        self.proxy_port = "443"
+        self.endpoint = "topology"
 
     def load_token(self):
         """
@@ -76,7 +71,8 @@ class TokenAuthentication:
             # print("Decoded Token Claims:")
             # for key, value in self.token_decoded.items():
             #    print(f"   {key}: {value}")
-            print("The Token has been successfully decoded!!!") 
+            print("The Token has been successfully decoded!!!")
+            return self
 
         except json.JSONDecodeError:
             print("Error: Failed to decode token JSON file!")
