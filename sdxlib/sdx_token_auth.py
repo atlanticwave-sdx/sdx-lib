@@ -4,7 +4,6 @@ import jwt  # PyJWT library for decoding JWT tokens
 import requests
 import subprocess
 import socket
-from fabrictestbed_extensions.fablib.fablib import FablibManager as fablib_manager
 
 
 class TokenAuthentication:
@@ -18,8 +17,7 @@ class TokenAuthentication:
             token_path="/home/fabric/.tokens.json",
             proxy_hostname="sdxapi.atlanticwave-sdx.ai",
             proxy_port="443",
-            endpoint="sax.net/sdx/topology",
-            slice_name="Slice-AWSDX"):
+            endpoint="sax.net/sdx/topology"):
         """
         Initializes the TokenAuthentication class with optional token path, endpoint, and slice name.
         If no path is provided, uses the environment variable FABRIC_TOKEN_LOCATION
@@ -31,9 +29,6 @@ class TokenAuthentication:
             slice_name (str, optional): The name of the slice to initialize. Defaults to "Slice-AWSDX".
         """
         self.token_path = token_path or os.getenv("FABRIC_TOKEN_LOCATION", "/home/fabric/.tokens.json")
-        self.project_id = None
-        self.project_name = None
-        self.fabric_ip = None
         self.fabric_token = None
         self.token_header = None
         self.token_payload = None
@@ -44,40 +39,6 @@ class TokenAuthentication:
         self.proxy_hostname = proxy_hostname
         self.proxy_port = proxy_port
         self.endpoint = endpoint  # API endpoint for token validation
-
-        # Initialize FablibManager to interact with the Fabric API
-        self.fablib = fablib_manager()
-
-        # Assign Slice's Name (provided during initialization)
-        self.slice_name = slice_name
-        # Initialize the slice if slice_name is provided during initialization
-        if self.slice_name:
-            self.initialize_slice()
-
-    def initialize_slice(self):
-        """
-        Initialize the slice using the slice_name that was passed during initialization.
-        """
-        if not self.slice_name:
-            print("Error: Slice name not provided!")
-            return
-
-        # Initialize the slice using FablibManager
-        self.slice = self.fablib.get_slice(self.slice_name)
-        if self.slice:
-            print(f"Slice '{self.slice_name}' initialized.")
-        else:
-            print(f"Error: Could not initialize slice '{self.slice_name}'.")
-
-    def show_slice(self):
-        """
-        Show the details of the initialized slice.
-        """
-        if self.slice:
-            print(f"Showing details for slice: {self.slice_name}")
-            self.slice.show()
-        else:
-            print("Error: Slice is not initialized.")
 
     def load_token(self):
         """
@@ -112,7 +73,7 @@ class TokenAuthentication:
             self.token_aud = self.token_decoded.get("aud", None)  # Audience
 
             print(f"FABRIC JWT Token: {self.fabric_token}")
-            print("\n🔍 ✅ Decoded Token Claims:")
+            print("Decoded Token Claims:")
             for key, value in self.token_decoded.items():
                 print(f"   {key}: {value}")
 
@@ -122,40 +83,6 @@ class TokenAuthentication:
             print("Error: Failed to decode JWT token!")
         except Exception as e:
             print(f"Unexpected Error: {e}")
-
-    def get_project_info(self):
-        """
-        Retrieve project ID and project name from the Fabric configuration.
-
-        This method assumes that a configuration manager (like fablib) is available
-        to retrieve the project information.
-
-        Raises:
-            KeyError: If project_id or project_name is not found in the configuration.
-        """
-        try:
-            # Retrieve project information using FablibManager
-            config_dict = dict(self.fablib.get_config().items())
-            self.project_id = config_dict.get("project_id")
-            self.project_name = config_dict.get("project_name")
-
-            if not self.project_id or not self.project_name:
-                print("Error: Project ID or Project Name not found!")
-
-            print(f"Project ID: {self.project_id}")
-            print(f"Project Name: {self.project_name}")
-
-        except Exception as e:
-            print(f"Error retrieving project info: {e}")
-
-    def get_fabric_ip(self):
-        """
-        Get the public IP address of the fabric by calling an external API (ipify).
-        
-        The method makes an HTTP GET request to retrieve the public IP address.
-        """
-        self.fabric_ip = requests.get("https://api64.ipify.org").text
-        print(f"Fabric’s public IP: {self.fabric_ip}")
 
     def trace_route(self, hostname="sdxapi.atlanticwave-sdx.ai"):
         """
@@ -243,16 +170,3 @@ class TokenAuthentication:
         except json.JSONDecodeError as e:
             print("JSON Decode Error:", str(e))
             # print("Raw Response Text:", response.text)  # Print raw response for debugging
-
-
-# Example of using the class
-if __name__ == "__main__":
-    token_auth = TokenAuthentication()
-    token_auth.load_token()
-    token_auth.get_project_info()
-    token_auth.get_fabric_ip()
-    token_auth.trace_route()
-    token_auth.ping_host()
-    token_auth.check_connection()
-    token_auth.validate_token()
-
