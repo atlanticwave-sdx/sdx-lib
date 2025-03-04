@@ -1168,9 +1168,14 @@ class SDXClient:
         """
         url = f"{self.base_url}/topology"
 
+        headers = {
+            "Content-Type": "application/json",  # Ensure JSON format
+            "Authorization": f"Bearer {self.fabric_token}"
+        }
+
         try:
             response = requests.get(
-                url, auth=(self.http_username, self.http_password), timeout=10
+                url, headers=headers, timeout=10
             )
             response.raise_for_status()
 
