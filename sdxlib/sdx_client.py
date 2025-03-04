@@ -1,12 +1,18 @@
+import ipywidgets as widgets
+import json
 import logging
 import pandas as pd
 import re
 import requests
-from typing import Optional, List, Dict, Union
+import sys
+
+from IPython.display import display
 from requests.exceptions import RequestException, HTTPError, Timeout
+from typing import Optional, List, Dict, Union, Tuple
 
 from sdxlib.sdx_exception import SDXException
-from sdxlib.sdx_response import SDXResponse
+from sdxlib.sdx_response import SDXResponse, SDXTopologyResponse
+from sdxlib.sdx_topology import Topology, Port, Status
 
 # Basic configuration for logging to stdout
 # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -71,6 +77,13 @@ class SDXClient:
         self.qos_metrics = qos_metrics
         self._logger = logger or logging.getLogger(__name__)
         self._request_cache = {}
+
+    # Set global Pandas display options
+    pd.set_option(
+        "display.max_colwidth", None
+    )  # Show full column width without truncation
+    pd.set_option("display.width", 1000)  # Expand the display width to prevent wrapping
+    pd.set_option("display.max_columns", None)  # Ensure all columns are shown if needed
 
     @property
     def base_url(self) -> str:
@@ -722,8 +735,8 @@ class SDXClient:
             response = requests.get(url, headers=headers, timeout=120)
             response.raise_for_status()
             response_json = response.json()
-            self._logger.info(f"L2VPN retrieval request sent to {url}.")
-            self._logger.info(f"Full response: {response_json}")
+            # self._logger.info(f"L2VPN retrieval request sent to {url}.")
+            # self._logger.info(f"Full response: {response_json}")
             l2vpn_data = response_json.get(service_id)
 
             if l2vpn_data is None:
@@ -767,7 +780,21 @@ class SDXClient:
                 ]
 
                 df = pd.DataFrame(node_info_list)
-                return df[ordered_columns] if not df.empty else df
+                df = df.drop(columns=["_logger"], errors="ignore")
+
+                # Perform the empty check on the actual DataFrame, not the Styler object
+                if df.empty:
+                    return "No L2VPNS currently exist."
+
+                # Select ordered columns before applying styling
+                df = df[ordered_columns]
+
+                # Apply styling at the very end
+                styled_df = df.style.set_table_attributes(
+                    "style='display:inline; overflow-x: auto;'"
+                ).hide_index()
+
+                return styled_df
 
             elif format == "json":
                 return vars(sdx_response)
@@ -831,7 +858,7 @@ class SDXClient:
         else:
             url = f"{self.base_url}/l2vpn/{self.VERSION}"
 
-        self._logger.info(f"Retrieving L2VPNs: URL={url}")
+        # self._logger.info(f"Retrieving L2VPNs: URL={url}")
 
         headers = {
             "Content-Type": "application/json",  # Ensure JSON format
@@ -842,8 +869,11 @@ class SDXClient:
             response.raise_for_status()
 
             l2vpns_json = response.json()
-            self._logger.info(f"L2VPN retrieval request sent to {url}.")
-            self._logger.info(f"Retrieved L2VPNs successfully: {l2vpns_json}")
+            # Debug: Print the API response
+            # print(json.dumps(l2vpns_json, indent=4))
+
+            # self._logger.info(f"L2VPN retrieval request sent to {url}.")
+            # self._logger.info(f"Retrieved L2VPNs successfully: {l2vpns_json}")
 
             # Parse each L2VPN JSON into SDXResponse objects
             l2vpns = {
@@ -856,13 +886,16 @@ class SDXClient:
                 node_info_list = [
                     {
                         "service_id": service_id,
-                        **vars(
-                            sdx_response
-                        ),  # Convert SDXResponse attributes to dictionary
+                        **{
+                            k: v
+                            for k, v in vars(sdx_response).items()
+                            if k != "_logger"
+                        },  # Convert SDXResponse attributes to dictionary
                     }
                     for service_id, sdx_response in l2vpns.items()
                 ]
                 return pd.DataFrame(node_info_list)
+
             elif format == "json":
                 return {
                     service_id: vars(sdx_response)
@@ -974,68 +1007,311 @@ class SDXClient:
         Raises:
             SDXException: If the API request fails or returns an error.
         """
-        topology_url = f"{self.base_url}/topology"
-
-        headers = {
-            "Content-Type": "application/json",  # Ensure JSON format
-            "Authorization": f"Bearer {self.fabric_token}"
-        }
 
         try:
+            topology = self.get_topology()
+            # print(f"DEBUG: get_topology() returned {type(topology)}")
+            vlan_usage = self._get_vlans_in_use()
+            topology_url = f"{self.base_url}/topology"
+
+            headers = {
+                "Content-Type": "application/json",  # Ensure JSON format
+                "Authorization": f"Bearer {self.fabric_token}"
+            }
             response = requests.get(topology_url, headers=headers, timeout=10)
             response.raise_for_status()
             data = response.json()
 
-            # Extract available ports
-            port_list = []
-            for node in data.get("nodes", []):
-                for port in node.get("ports", []):
-                    if port.get("status") == "up" and not port.get("nni"):
-                        port_list.append(
-                            {"Port ID": port.get("id"), "Status": port.get("status")}
-                        )
+            # Get available ports from SDXTopologyResponse
+            available_ports = topology.get_available_ports()
+
+            # Format ports
+            formatted_ports = [
+                self._format_port(port, vlan_usage) for port in available_ports
+            ]
 
             # Return in the requested format
             if format == "dataframe":
-                df = pd.DataFrame(port_list, index=None)
-                return df.style.hide(axis="index")
+
+                df = pd.DataFrame(formatted_ports, index=None)
+
+                # Perform the empty check on the actual DataFrame, not the Styler object
+                if df.empty:
+                    return "No Ports currently exist."
+
+                return df
+
             elif format == "json":
-                return port_list
+                return formatted_ports
             else:
                 raise ValueError("Invalid format specified. Use 'dataframe' or 'json'.")
 
-        except HTTPError as e:
-            status_code = e.response.status_code
-            error_details = None
+        except SDXException as e:
+            self._logger.error(f"Failed to retrieve available ports: {e}.")
+            raise
 
-            try:
-                error_details = e.response.json().get("error", None)
-            except ValueError:
-                error_details = e.response.text
+    def _format_port(
+        self, port: Port, vlan_usage: Dict[str, List[int]]
+    ) -> Dict[str, str]:
+        """Formats port data for display, using precomputed VLAN usage."""
+        domain, device, port_number = self._parse_port_id(port.id)
+        vlan_range = self._get_vlan_range(port, vlan_usage)
+        vlans_in_use = vlan_usage.get(port.id, [])  # Lookup VLANs in use
 
-            method_messages = {
-                400: "Request does not have a valid JSON or body is incomplete/incorrect",
-                401: "Not Authorized",
-                404: "Topology endpoint not found",
-            }
-            error_message = method_messages.get(status_code, "Unknown error occurred.")
-            self._logger.error(
-                f"Failed to retrieve available ports. Status code: {status_code}: {error_message}"
+        return {
+            "Port ID": port.id,
+            "Domain": domain,
+            "Device": device,
+            "Port #": port_number,
+            "Status": port.status.value,
+            "Entities": ", ".join(port.entities) if port.entities else "None",
+            "VLANs Available": vlan_range,
+            "VLANs in Use": "; ".join(map(str, vlans_in_use))
+            if vlans_in_use
+            else "None",
+        }
+
+    def _parse_port_id(self, port_id: str) -> Tuple[str, str, str]:
+        """Parses the port ID to extract domain, device, and port number."""
+        match = re.match(r"urn:sdx:port:(.*?):(.*?):(.*?)$", port_id)
+        if match:
+            return match.group(1), match.group(2), match.group(3)
+
+        # Log the error and continue
+        self._logger.error(f"Invalid port ID format: {port_id}")
+        return port_id, "Invalid Format", "Invalid Format"
+
+    def _get_vlan_range(self, port: Port, vlans_in_use: Dict[str, List[int]]) -> str:
+        """Extracts VLAN availability range from the Port services attribute."""
+
+        try:
+            vlan_data = port.services.get("l2vpn-ptp", {}).get("vlan_range", [])
+            in_use = set(vlans_in_use.get(port.id, []))
+
+            if (
+                vlan_data
+                and isinstance(vlan_data, list)
+                and all(len(v) == 2 for v in vlan_data)
+            ):
+                available_vlans = []
+
+                for start, end in vlan_data:
+                    vlan_set = set(range(start, end + 1))  # Generate VLAN range
+                    vlan_set.difference_update(in_use)
+
+                if vlan_set:
+                    sorted_vlans = sorted(vlan_set)
+                    range_start = range_end = sorted_vlans[0]
+
+                    for vlan in sorted_vlans[1:]:
+                        if vlan == range_end + 1:
+                            range_end = vlan  # Expand the range
+                        else:
+                            available_vlans.append(
+                                f"{range_start}-{range_end}"
+                                if range_start != range_end
+                                else str(range_start)
+                            )
+                            range_start = range_end = vlan  # Start a new range
+
+                    # Add the last range
+                    available_vlans.append(
+                        f"{range_start}-{range_end}"
+                        if range_start != range_end
+                        else str(range_start)
+                    )
+
+            return ", ".join(available_vlans) if available_vlans else "None"
+
+        except Exception as e:
+            self._logger.error(f"Error extracting VLAN range from port {port.id}: {e}")
+
+        return "None"
+
+    def _get_vlans_in_use(self) -> Dict[str, List[int]]:
+        """
+        Retrieves VLANs in use for all ports by matching them with L2VPNs.
+
+        Returns:
+            Dict[str, List[int]]: A dictionary where keys are port IDs and values are lists of VLANs in use.
+        """
+        vlan_usage = {}
+
+        try:
+            l2vpns = self.get_all_l2vpns(format="json")  # Retrieve all active L2VPNs
+
+            for service_id, l2vpn in l2vpns.items():
+                for endpoint in l2vpn.get("endpoints", []):
+                    port_id = endpoint.get("port_id")
+                    vlan_value = endpoint.get("vlan")
+                    # print(vlan_value)
+
+                    if port_id not in vlan_usage:
+                        vlan_usage[port_id] = set()  # Initialize VLAN set
+
+                    if isinstance(vlan_value, str) and ":" in vlan_value:
+                        start, end = map(int, vlan_value.split(":"))
+                        vlan_usage[port_id].update(range(start, end + 1))
+                    elif isinstance(vlan_value, str) and vlan_value.isdigit():
+                        vlan_usage[port_id].add(int(vlan_value))
+
+            # Convert sets to sorted lists
+            return {port_id: sorted(vlans) for port_id, vlans in vlan_usage.items()}
+
+        except SDXException as e:
+            self._logger.error(f"Error retrieving VLAN usage: {e}")
+            return {}
+
+    def get_topology(self) -> Topology:
+        """
+        Fetches the topology from the SDX controller and returns an Topology object.
+        """
+        url = f"{self.base_url}/topology"
+
+        try:
+            response = requests.get(
+                url, auth=(self.http_username, self.http_password), timeout=10
             )
-            raise SDXException(
-                status_code=status_code,
-                method_messages=method_messages,
-                message=error_message,
-                error_details=error_details,
+            response.raise_for_status()
+
+            # First, parse the raw response
+            raw_topology = SDXTopologyResponse.from_json(response.json())
+
+            # print(f"DEBUG: get_topology() returned {type(raw_topology)}")
+
+            # Convert it to processed topology
+            return Topology(
+                name=raw_topology.name,
+                id=raw_topology.id,
+                version=raw_topology.version,
+                timestamp=raw_topology.timestamp,
+                model_version=raw_topology.model_version,
+                nodes=raw_topology.nodes,
+                links=raw_topology.links,
+                services=raw_topology.services,
             )
 
-        except Timeout:
-            self._logger.error("The request to retrieve available ports timed out.")
-            raise SDXException("The request to retrieve available ports timed out.")
+        except (HTTPError, Timeout, RequestException) as e:
+            self._logger.error(f"Failed to retrieve topology: {e}")
+            raise SDXException(f"Failed to retrieve topology: {e}")
 
-        except RequestException as e:
-            self._logger.error(f"Failed to retrieve available ports: {e}")
-            raise SDXException(f"Failed to retrieve available ports: {e}")
+    def search(self, search_term: str, search_type: str) -> pd.DataFrame:
+        """
+        Generalized search method for both entities and ports.
+
+        Args:
+            search_term (str): The search query (e.g., "Ampath", "FIU").
+            search_type (str): The type of search - either "ports" or "entities".
+
+        Returns:
+            pd.DataFrame: A DataFrame containing matching search results.
+        """
+        topology = self.get_topology()
+        vlan_usage = self._get_vlans_in_use()
+
+        # print("DEBUG: VLAN Usage:", vlan_usage)
+        # print("DEBUG: VLAN Usage Keys:", vlan_usage.keys())
+
+        if search_type == "ports":
+            filtered_ports = topology.search_ports(search_term)
+        elif search_type == "entities":
+            filtered_ports = topology.search_entities(search_term)
+        else:
+            raise ValueError("Invalid search type. Use 'ports' or 'entities'.")
+
+        # print("DEBUG: Filtered Ports:", [port.id for port in filtered_ports])
+
+        formatted_ports = [
+            self._format_port(port, vlan_usage) for port in filtered_ports
+        ]
+
+        return pd.DataFrame(formatted_ports)
+
+    def interactive_search(self):
+        """
+        Interactive version of the search function that allows users to choose
+        between searching ports or entities using a dropdown and input box.
+
+        - If running in a **script**, it prompts for input.
+        - If running in **Jupyter Notebook**, it uses dropdowns & text fields.
+        """
+
+        def perform_search(search_term, search_type):
+            """Handles the search and displays results."""
+            search_term = search_term.strip()
+            if search_term:
+                self.search(search_term, search_type)
+
+        # Detect Jupyter Notebook
+        if "ipykernel" in sys.modules:
+            print("Interactive Mode Enabled: Select search type and enter a query.")
+
+            # Create dropdown for search type
+            search_type_dropdown = widgets.Dropdown(
+                options=["ports", "entities"],
+                value="ports",
+                description="Type:",
+                disabled=False,
+            )
+
+            # Create text input for search term
+            search_box = widgets.Text(
+                placeholder="Enter a search term...",
+                description="Search:",
+                continuous_update=False,
+            )
+
+            # Callback function
+            def on_search_change(change):
+                perform_search(search_box.value, search_type_dropdown.value)
+
+            # Bind function to both dropdown & text box
+            search_box.observe(on_search_change, names="value")
+            search_type_dropdown.observe(on_search_change, names="value")
+
+            # Display widgets
+            display(search_type_dropdown, search_box)
+
+        else:
+            # Terminal-based input
+            search_type = (
+                input("Enter search type ('ports' or 'entities'): ").strip().lower()
+            )
+            search_term = input("Enter search term: ").strip()
+            perform_search(search_term, search_type)
+
+    def search_ports(self, search_term: str) -> pd.DataFrame:
+        """
+        Searches for ports based on a substring in the port name.
+        """
+        topology = self.get_topology()
+        filtered_ports = topology.search_ports(search_term)
+
+        df = pd.DataFrame([port.__dict__ for port in filtered_ports])
+        df = df[df["nni"] == ""]
+        df = df.drop(columns=["nni"])
+        df = df.reset_index(drop=True)
+
+        # # Apply styling at the very end
+        # styled_df = df.style.set_table_attributes("style='display:inline; overflow-x: auto;'").hide_index()
+
+        # return styled_df
+
+        return df
+
+    def search_entities(self, search_term: str) -> pd.DataFrame:
+        """
+        Searches for ports based on entities.
+        """
+        topology = self.get_topology()
+        filtered_ports = topology.search_entities(search_term)
+
+        df = pd.DataFrame([port.__dict__ for port in filtered_ports])
+        df = df[df["nni"] == ""]
+        df = df.drop(columns=["nni"])
+        df = df.reset_index(drop=True)
+
+        return df
 
     # Utility Methods
     def __str__(self) -> str:
