@@ -45,11 +45,10 @@ class SDXClient:
 
     def __init__(
         self,
+        fabric_token = None,
         base_url: Optional[str] = None,
         name: Optional[str] = None,
         endpoints: Optional[List[Dict[str, str]]] = None,
-        http_username=None,
-        http_password=None,
         description: Optional[str] = None,
         notifications: Optional[List[Dict[str, str]]] = None,
         scheduling: Optional[Dict[str, str]] = None,
@@ -60,8 +59,6 @@ class SDXClient:
 
         Args:
         - base_url (Optional[str]): The base URL of the SDX API.
-        - http_username (Optional[str]): The HTTP basic authentication username.
-        - http_password (Optional[str]): The HTTP basic authentication password.
         - name (Optional[str]): The name of the SDX client.
         - endpoints (Optional[List[Dict[str, str]]]): List  of dictionaries with 'port_id' and 'vlan' keys for each endpoint.
         - description (Optional[str]): Description of the client (default: None).
@@ -70,9 +67,8 @@ class SDXClient:
         - qos_metrics (Optional[Dict[str, str]]): Quality of service metrics (default: None).
         """
 
+        self.fabric_token = fabric_token
         self.base_url = base_url
-        self.http_username = http_username
-        self.http_password = http_password
         self.name = name
         self.endpoints = endpoints
         self.description = description
@@ -81,18 +77,6 @@ class SDXClient:
         self.qos_metrics = qos_metrics
         self._logger = logger or logging.getLogger(__name__)
         self._request_cache = {}
-
-    #     self.token = self._load_fabric_token()
-
-    # def _load_fabric_token(self) -> Optional[str]:
-    #     token_path = os.getenv("FABRIC_TOKEN_LOCATION", "/home/fabric/.tokens.json")
-    #     try:
-    #         with open(token_path, "r") as f:
-    #             token_data = json.load(f)
-    #             return token_data.get("token")
-    #     except (FileNotFoundError, json.JSONDecodeError) as e:
-    #         self._logger.error(f"Could not load FABRIC token: {e}")
-    #         return None
 
     # Set global Pandas display options
     pd.set_option(
@@ -112,30 +96,6 @@ class SDXClient:
         if not isinstance(value, str) or not value.strip():
             raise ValueError("Base URL must be a non-empty string.")
         self._base_url = value
-
-    @property
-    def http_username(self) -> Optional[str]:
-        """Getter for http_username attribute."""
-        return self._http_username
-
-    @http_username.setter
-    def http_username(self, value: Optional[str]):
-        """Setter for http_username attribute."""
-        if value is not None and not isinstance(value, str):
-            raise ValueError("HTTP username must be a string or None.")
-        self._http_username = value
-
-    @property
-    def http_password(self) -> Optional[str]:
-        """Getter for http_password attribute."""
-        return self._http_password
-
-    @http_password.setter
-    def http_password(self, value: Optional[str]):
-        """Setter for http_password attribute."""
-        if value is not None and not isinstance(value, str):
-            raise ValueError("HTTP password must be a string or None.")
-        self._http_password = value
 
     @property
     def name(self) -> Optional[str]:
@@ -537,14 +497,25 @@ class SDXClient:
             SDXException: If the L2VPN creation fails.
             ValueError: If required attributes are missing.
         """
+        # Debugging: Log current state
+        self._logger.debug(f"Base URL: {self.base_url}")
+        self._logger.debug(f"Name: {self.name}")
+        self._logger.debug(f"Endpoints: {self.endpoints}")
+
         if not self.base_url or not self.name or not self.endpoints:
             raise ValueError(
                 "Creating L2VPN requires the base URL, name, and endpoints at minumum."
             )
         if not isinstance(self.endpoints, list):
             raise TypeError("Endpoints must be a list.")
+
         url = f"{self.base_url}/l2vpn/{self.VERSION}"
         # print(url)
+
+        headers = {
+            "Content-Type": "application/json",  # Ensure JSON format
+            "Authorization": f"Bearer {self.fabric_token}"
+        }
 
         payload = {"name": self.name, "endpoints": self.endpoints}
 
@@ -572,9 +543,7 @@ class SDXClient:
             return {"service_id": response_json.get("service_id")}
 
         try:
-            # Include authentication if username and password are provided.
-            auth = (self.http_username, self.http_password)
-            response = requests.post(url, json=payload, auth=auth, timeout=120)
+            response = requests.post(url, json=payload, headers=headers, timeout=120)
             response.raise_for_status()
             response_json = response.json()
             cached_data = (payload, response_json)
@@ -653,6 +622,11 @@ class SDXClient:
 
         url = f"{self.base_url}/l2vpn/{self.VERSION}/{service_id}"
 
+        headers = {
+            "Content-Type": "application/json",  # Ensure JSON format
+            "Authorization": f"Bearer {self.fabric_token}"
+        }
+
         payload = {"service_id": service_id}
 
         if state is not None:
@@ -679,9 +653,8 @@ class SDXClient:
         self._logger.debug(f"Sending request to update L2VPN with payload: {payload}")
 
         try:
-            auth = (self.http_username, self.http_password)
             response = requests.patch(
-                url, json=payload, auth=auth, verify=True, timeout=120
+                url, json=payload, headers=headers, timeout=120
             )
             response.raise_for_status()
             self._logger.info(
@@ -753,9 +726,13 @@ class SDXClient:
 
         url = f"{self.base_url}/l2vpn/{self.VERSION}/{service_id}"
 
+        headers = {
+            "Content-Type": "application/json",  # Ensure JSON format
+            "Authorization": f"Bearer {self.fabric_token}"
+        }
+
         try:
-            auth = (self.http_username, self.http_password)
-            response = requests.get(url, auth=auth, verify=True, timeout=120)
+            response = requests.get(url, headers=headers, timeout=120)
             response.raise_for_status()
             response_json = response.json()
             # self._logger.info(f"L2VPN retrieval request sent to {url}.")
@@ -883,9 +860,12 @@ class SDXClient:
 
         # self._logger.info(f"Retrieving L2VPNs: URL={url}")
 
+        headers = {
+            "Content-Type": "application/json",  # Ensure JSON format
+            "Authorization": f"Bearer {self.fabric_token}"
+        }
         try:
-            auth = (self.http_username, self.http_password)
-            response = requests.get(url, auth=auth, verify=True, timeout=120)
+            response = requests.get(url, headers=headers, timeout=120)
             response.raise_for_status()
 
             l2vpns_json = response.json()
@@ -968,9 +948,13 @@ class SDXClient:
         """
         url = f"{self.base_url}/l2vpn/{self.VERSION}/{service_id}"
 
+        headers = {
+            "Content-Type": "application/json",  # Ensure JSON format
+            "Authorization": f"Bearer {self.fabric_token}"
+        }
+
         try:
-            auth = (self.http_username, self.http_password)
-            response = requests.delete(url, auth=auth, verify=True, timeout=120)
+            response = requests.delete(url, headers=headers, timeout=120)
             response.raise_for_status()
             self._logger.info(f"L2VPN deletion request sent to {url}.")
             return response.json() if response.content else None
@@ -1023,10 +1007,22 @@ class SDXClient:
         Raises:
             SDXException: If the API request fails or returns an error.
         """
+
         try:
             topology = self.get_topology()
             # print(f"DEBUG: get_topology() returned {type(topology)}")
             vlan_usage = self._get_vlans_in_use()
+
+            topology_url = f"{self.base_url}/topology"
+
+            headers = {
+                "Content-Type": "application/json",  # Ensure JSON format
+                "Authorization": f"Bearer {self.fabric_token}"
+            }
+            response = requests.get(topology_url, headers=headers, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+
 
             # Get available ports from SDXTopologyResponse
             available_ports = topology.get_available_ports()
