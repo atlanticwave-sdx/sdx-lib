@@ -1,19 +1,35 @@
 import pycountry
 import re
 
+from dacite import from_dict, Config
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 # Global Constants
 MODEL_VERSION = "2.0.0"
 
-# Regex Patterns
-NAME_PATTERN = re.compile(r"^[\w.,\-/]{1,30}$")  # Limits name to <= 30 characters
-URN_TOPOLOGY_PATTERN = re.compile(r"^urn:sdx:topology:[\w.-]+$")
-URN_NODE_PATTERN = re.compile(r"^urn:sdx:node:[\w.-]+:[\w.-]+$")
-URN_PORT_PATTERN = re.compile(r"^urn:sdx:port:[\w.-]+:[\w.-]+:[\w.-]+$")
-URN_LINK_PATTERN = re.compile(r"^urn:sdx:link:[\w.-]+:[\w.-]+$")
+# # Regex Patterns
+# Matches name pattern
+NAME_PATTERN = re.compile(r"^[\w.,\-/]{1,30}$")
+
+# Matches topology URNs: urn:sdx:topology:<oxp_url>
+URN_TOPOLOGY_PATTERN = re.compile(r"^urn:sdx:topology:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,3}$")
+# Matches node URNs: urn:sdx:node:<oxp_url>:<node_name>
+URN_NODE_PATTERN = re.compile(
+    r"^urn:sdx:node:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,3}:[\w.,\-/]{1,30}$"
+)
+# Matches port URNs: urn:sdx:port:<oxp_url>:<node_name>:<port_name>
+URN_PORT_PATTERN = re.compile(
+    r"^urn:sdx:port:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,3}:[\w.,\-/]{1,30}:[\w.,\-/]{1,30}$"
+)
+# Matches link URNs: urn:sdx:link:<oxp_url>:<link_name>
+URN_LINK_PATTERN = re.compile(
+    r"^urn:sdx:link:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,3}:[\w.,\-/]{1,30}$"
+)
+
+
+# Matches timestamps (ISO 8601 format with 'Z' at the end)
 TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
@@ -21,12 +37,14 @@ class Status(Enum):
     UP = "up"
     DOWN = "down"
     ERROR = "error"
+    # MAINTENANCE = "maintenance"  # in spec but not topology
+    # UNDER_PROVISIONING = "under provisioning"  # in spec but not topology
 
 
 class State(Enum):
     ENABLED = "enabled"
     DISABLED = "disabled"
-    MAINTENANCE = "maintenance"
+    MAINTENANCE = "maintenance"  # in topology but not spec
 
 
 class PortType(str, Enum):
@@ -135,6 +153,10 @@ class Port:
                         f"Invalid VLAN range: {vlan_range}. Must be between 1 and 4095, and first value must be smaller than the second."
                     )
 
+    def __hash__(self):
+        """Make Port hashable by using its unique ID."""
+        return hash(self.id)
+
 
 @dataclass
 class Node:
@@ -163,7 +185,7 @@ class Link:
     name: str
     id: str
     ports: List[str]
-    bandwidth: float
+    bandwidth: float = 0.0
     type: Optional[LinkType] = LinkType.INTRA
     residual_bandwidth: float = 100.0
     latency: float = 0.0
@@ -213,16 +235,26 @@ class Link:
 
 @dataclass
 class Topology:
+    """
+    A processed version of SDXTopologyResponse that adds fast lookups for ports, nodes, and links.
+    """
+
     name: str
     id: str
-    version: int
+    version: str
     timestamp: str
-    model_version: str = MODEL_VERSION
+    # Adding optional to the str. Issue #418 on SDXController has been filed to correct this such that model_version only supports "2.0.0"
+    model_version: Optional[str] = MODEL_VERSION or None
     nodes: List[Node] = field(default_factory=list)
     links: List[Link] = field(default_factory=list)
     services: Optional[List[str]] = field(default_factory=lambda: ["l2vpn-ptp"])
 
+    port_lookup: Dict[str, Port] = field(default_factory=dict)
+
     def __post_init__(self):
+        """Automatically populates lookup dictionaries for fast searching."""
+
+        # Run validation logic on the parsed data
         if not NAME_PATTERN.match(self.name) or len(self.name) > 30:
             raise ValueError(f"Invalid topology name: {self.name}")
         if not URN_TOPOLOGY_PATTERN.match(self.id):
@@ -248,7 +280,49 @@ class Topology:
 
         # Ensure services contain only valid values
         allowed_services = {"l2vpn-ptp", "l2vpn-ptmp"}
-        if not all(service in allowed_services for service in self.services):
+        if self.services is None:
+            self.services = ["l2vpn-ptp"]  # Default if missing
+        elif not all(service in allowed_services for service in self.services):
             raise ValueError(
                 f"Invalid service type. Must be one of {allowed_services}."
             )
+
+        # Populate fast lookup table
+        for node in self.nodes:
+            for port in node.ports:
+                self.port_lookup[port.id] = port
+
+    def get_available_ports(self) -> List[Port]:
+        """Returns a list of available ports that are UP and not NNI."""
+        # for port in self.port_lookup.values():
+        #     print(f"Port: {port.id}, NNI: '{port.nni}' (Type: {type(port.nni)})")
+        return [
+            port
+            for port in self.port_lookup.values()
+            if port.status == Status.UP and (not port.nni or port.nni.strip() == "")
+        ]
+
+    def search_ports(self, search_term: str) -> List[Port]:
+        """Search for ports based on a substring in the port name."""
+        return [
+            port
+            for port in self.port_lookup.values()
+            if search_term.lower() in port.name.lower()
+        ]
+
+    def search_entities(self, search_term: str) -> List[Port]:
+        """Search for ports based on entities."""
+        return [
+            port
+            for port in self.port_lookup.values()
+            if any(search_term.lower() in entity.lower() for entity in port.entities)
+        ]
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Topology":
+        """Automatically converts a dictionary to a Topology object using dacite."""
+        return from_dict(
+            data_class=cls,
+            data=data,
+            config=Config(cast=[Status, State, PortType, LinkType, List[str]]),
+        )

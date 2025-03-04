@@ -5,6 +5,23 @@ TEST_URL = "http://aw-sdx-controller.renci.org:8081"
 TEST_USERNAME = "testuser"
 TEST_PASSWORD = "testpassword"
 TEST_NAME = "Test_L2VPN"
+TEST_OWNERSHIP = "user@example.com"
+TEST_CREATION_DATE = "20240522T00:00:00Z"
+TEST_ARCHIVED_DATE = "0"
+TEST_STATUS = "up"
+TEST_STATE = "enabled"
+TEST_COUNTERS_LOCATION = "https://my.aw-sdx.net/l2vpn/7cdf23e8978c"
+TEST_LAST_MODIFIED = "0"
+TEST_CURRENT_PATH = [
+    "urn:sdx:link:tenet.ac.za:LinkToSAX",
+    "urn:sdx:link:tenet.ac.za:LinkToAmpath",
+    "urn:sdx:link:ampath.net:LinkToSAX",
+]
+TEST_OXP_SERVICE_IDS = {
+    "AmLight.net": ["c73da8e1"],
+    "TENET.ac.za": ["5d034620"],
+    "SAX.br": ["7cdf23e8978c"],
+}
 TEST_ENDPOINTS = [
     {
         "port_id": "urn:sdx:port:test-oxp_url:test-node_name:test-port_name",
@@ -39,6 +56,38 @@ VLAN_UNTAGGED = {
     "port_id": "urn:sdx:port:test-oxp_url:test-node_name:test-port_name2",
     "vlan": "untagged",
 }
+
+TEST_VALID_RESPONSE = {
+    "service_id": TEST_SERVICE_ID,
+    "name": TEST_NAME,
+    "endpoints": TEST_ENDPOINTS,
+    "ownership": TEST_OWNERSHIP,
+    "creation_date": TEST_CREATION_DATE,
+    "archived_date": TEST_ARCHIVED_DATE,
+    "status": TEST_STATUS,
+    "state": TEST_STATE,
+    "counters_location": TEST_COUNTERS_LOCATION,
+    "last_modified": TEST_LAST_MODIFIED,
+    "current_path": TEST_CURRENT_PATH,
+    "oxp_service_ids": TEST_OXP_SERVICE_IDS,
+}
+
+TEST_MISSING_ATTRIBUTES_RESPONSE = {
+    "service_id": TEST_SERVICE_ID,
+    "name": TEST_NAME,
+    "endpoints": TEST_ENDPOINTS,
+    "ownership": TEST_OWNERSHIP,
+    "creation_date": TEST_CREATION_DATE,
+    "archived_date": TEST_ARCHIVED_DATE,
+    "status": TEST_STATUS,
+    "state": TEST_STATE,
+    "counters_location": TEST_COUNTERS_LOCATION,
+    "last_modified": TEST_LAST_MODIFIED,
+    "current_path": TEST_CURRENT_PATH,
+    "oxp_service_ids": TEST_OXP_SERVICE_IDS,
+    # `scheduling` and `description` are intentionally missing
+}
+
 
 MOCK_RESPONSE = {
     TEST_SERVICE_ID: {

@@ -1,6 +1,7 @@
 import unittest
 from sdxlib.sdx_topology import Link, Status, State
 from topology_test_config import sample_link, sample_port1, sample_port2
+from sdxlib.sdx_response import SDXTopologyResponse
 
 
 class TestLink(unittest.TestCase):

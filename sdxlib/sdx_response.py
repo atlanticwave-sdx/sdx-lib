@@ -1,6 +1,14 @@
 import json
 import logging
+
+from dacite import from_dict, Config
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
+
+from sdxlib.sdx_topology import *
+
+# Global Constants
+MODEL_VERSION = "2.0.0"
 
 
 class SDXResponse:
@@ -58,12 +66,26 @@ class SDXResponse:
         self.archived_date: str = self._validate_required(
             response_json, "archived_date", str, must_have_value=True, default="0"
         )
+        self.archived_date: Optional[str] = self._validate_optional(
+            response_json, "archived_date", str
+        ) or "0"
+
         self.status: str = self._validate_required(
-            response_json, "status", str, must_have_value=True
+            response_json,
+            "status",
+            str,
+            must_have_value=True,
+            allowed_values=self.ALLOWED_STATUS,
         )
+
         self.state: str = self._validate_required(
-            response_json, "state", str, must_have_value=True
+            response_json,
+            "state",
+            str,
+            must_have_value=True,
+            allowed_values=self.ALLOWED_STATE,
         )
+
         self.counters_location: str = self._validate_required(
             response_json, "counters_location", str, must_have_value=True
         )
@@ -100,6 +122,7 @@ class SDXResponse:
         expected_type: type,
         must_have_value: bool = False,
         default=None,
+        allowed_values: Optional[set] = None,  # New optional argument
     ):
         """Ensures a required field exists and has a valid value."""
         if key not in data:
@@ -124,6 +147,14 @@ class SDXResponse:
                 f"Invalid type for {key}: Expected {expected_type.__name__}, got {type(value).__name__}"
             )
 
+        if allowed_values and value not in allowed_values:
+            self._logger.error(
+                f"Invalid {key}: {value}. Allowed values: {allowed_values}"
+            )
+            raise ValueError(
+                f"Invalid {key}: {value}. Allowed values: {allowed_values}"
+            )
+
         return value
 
     def _validate_optional(self, data: dict, key: str, expected_type: type):
@@ -131,9 +162,9 @@ class SDXResponse:
         value = data.get(key)
 
         if value is not None and not isinstance(value, expected_type):
-            self._logger.warning(
-                f"Optional field {key} has incorrect type: Expected {expected_type.__name__}, got {type(value).__name__}"
-            )
+            # self._logger.warning(
+            #     f"Optional field {key} has incorrect type: Expected {expected_type.__name__}, got {type(value).__name__}"
+            # )
             return None
 
         return value
@@ -173,3 +204,39 @@ class SDXResponse:
             indent=4,
             ensure_ascii=False,
         )
+
+
+@dataclass
+class SDXTopologyResponse:
+    """
+    Parses and stores the topology response from the SDX controller.
+    """
+
+    name: str
+    id: str
+    version: int
+    timestamp: str
+    model_version: str = MODEL_VERSION
+    nodes: List[Node] = field(default_factory=list)
+    links: List[Link] = field(default_factory=list)
+    services: Optional[List[str]] = field(default_factory=lambda: ["l2vpn-ptp"])
+
+    @classmethod
+    def from_json(cls, response_json: dict) -> "SDXTopologyResponse":
+        """
+        Parses JSON response and returns an SDXTopologyResponse instance.
+        Ensures latitude, longitude, and port type are cast to correct types.
+        """
+        config = Config(
+            cast=[Status, State, LinkType],
+            type_hooks={
+                float: lambda v: float(v)
+                if isinstance(v, str)
+                else v,  # Convert lat/lon to float
+                PortType: lambda v: PortType(v)
+                if isinstance(v, str)
+                else v,  # Convert port type to enum
+                LinkType: lambda v: LinkType(v) if isinstance(v, str) else v,
+            },
+        )
+        return from_dict(Topology, response_json, config=config)
