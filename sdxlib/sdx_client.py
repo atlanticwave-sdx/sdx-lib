@@ -1012,7 +1012,6 @@ class SDXClient:
             topology = self.get_topology()
             # print(f"DEBUG: get_topology() returned {type(topology)}")
             vlan_usage = self._get_vlans_in_use()
-
             topology_url = f"{self.base_url}/topology"
 
             headers = {
@@ -1022,7 +1021,6 @@ class SDXClient:
             response = requests.get(topology_url, headers=headers, timeout=10)
             response.raise_for_status()
             data = response.json()
-
 
             # Get available ports from SDXTopologyResponse
             available_ports = topology.get_available_ports()
