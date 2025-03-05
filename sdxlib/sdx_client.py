@@ -6,6 +6,7 @@ import re
 import requests
 import sys
 
+from dacite import from_dict, Config
 from IPython.display import display
 from requests.exceptions import RequestException, HTTPError, Timeout
 from typing import Optional, List, Dict, Union, Tuple
@@ -45,7 +46,7 @@ class SDXClient:
 
     def __init__(
         self,
-        fabric_token = None,
+        fabric_token=None,
         base_url: Optional[str] = None,
         name: Optional[str] = None,
         endpoints: Optional[List[Dict[str, str]]] = None,
@@ -514,7 +515,7 @@ class SDXClient:
 
         headers = {
             "Content-Type": "application/json",  # Ensure JSON format
-            "Authorization": f"Bearer {self.fabric_token}"
+            "Authorization": f"Bearer {self.fabric_token}",
         }
 
         payload = {"name": self.name, "endpoints": self.endpoints}
@@ -624,7 +625,7 @@ class SDXClient:
 
         headers = {
             "Content-Type": "application/json",  # Ensure JSON format
-            "Authorization": f"Bearer {self.fabric_token}"
+            "Authorization": f"Bearer {self.fabric_token}",
         }
 
         payload = {"service_id": service_id}
@@ -653,9 +654,7 @@ class SDXClient:
         self._logger.debug(f"Sending request to update L2VPN with payload: {payload}")
 
         try:
-            response = requests.patch(
-                url, json=payload, headers=headers, timeout=120
-            )
+            response = requests.patch(url, json=payload, headers=headers, timeout=120)
             response.raise_for_status()
             self._logger.info(
                 f"L2VPN update request sent to {url}, with payload: {payload}."
@@ -728,7 +727,7 @@ class SDXClient:
 
         headers = {
             "Content-Type": "application/json",  # Ensure JSON format
-            "Authorization": f"Bearer {self.fabric_token}"
+            "Authorization": f"Bearer {self.fabric_token}",
         }
 
         try:
@@ -862,7 +861,7 @@ class SDXClient:
 
         headers = {
             "Content-Type": "application/json",  # Ensure JSON format
-            "Authorization": f"Bearer {self.fabric_token}"
+            "Authorization": f"Bearer {self.fabric_token}",
         }
         try:
             response = requests.get(url, headers=headers, timeout=120)
@@ -950,7 +949,7 @@ class SDXClient:
 
         headers = {
             "Content-Type": "application/json",  # Ensure JSON format
-            "Authorization": f"Bearer {self.fabric_token}"
+            "Authorization": f"Bearer {self.fabric_token}",
         }
 
         try:
@@ -1016,7 +1015,7 @@ class SDXClient:
 
             headers = {
                 "Content-Type": "application/json",  # Ensure JSON format
-                "Authorization": f"Bearer {self.fabric_token}"
+                "Authorization": f"Bearer {self.fabric_token}",
             }
             response = requests.get(topology_url, headers=headers, timeout=10)
             response.raise_for_status()
@@ -1170,17 +1169,20 @@ class SDXClient:
 
         headers = {
             "Content-Type": "application/json",  # Ensure JSON format
-            "Authorization": f"Bearer {self.fabric_token}"
+            "Authorization": f"Bearer {self.fabric_token}",
         }
 
         try:
-            response = requests.get(
-                url, headers=headers, timeout=10
-            )
+            response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
 
-            # First, parse the raw response
-            raw_topology = SDXTopologyResponse.from_json(response.json())
+            # # First, parse the raw response
+            # raw_topology = SDXTopologyResponse.from_json(response.json())
+
+            # Use `Config` to automatically handle `None` values
+            raw_topology = from_dict(
+                SDXTopologyResponse, response.json(), config=Config(strict=False)
+            )
 
             # print(f"DEBUG: get_topology() returned {type(raw_topology)}")
 

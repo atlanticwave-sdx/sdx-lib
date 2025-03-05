@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Union
 
 from sdxlib.sdx_topology import *
 
+
 # Global Constants
 MODEL_VERSION = "2.0.0"
 

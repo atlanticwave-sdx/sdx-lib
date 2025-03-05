@@ -65,44 +65,46 @@ class LinkType(Enum):
 
 @dataclass
 class Location:
-    address: str
     latitude: float
     longitude: float
-    iso3166_2_lvl4: str
+    iso3166_2_lvl4: Optional[str] = None
+    address: Optional[str] = None
 
     def __post_init__(self):
-        if len(self.address) > 255:
+        if self.address is not None and len(self.address) > 255:
             raise ValueError("Address must be at most 255 characters.")
         if not (-90 <= self.latitude <= 90):
             raise ValueError("Latitude must be between -90 and 90.")
         if not (-180 <= self.longitude <= 180):
             raise ValueError("Longitude must be between -180 and 180.")
-        if not (2 <= len(self.iso3166_2_lvl4) <= 6):
+        if self.iso3166_2_lvl4 is not None and not (2 <= len(self.iso3166_2_lvl4) <= 6):
             raise ValueError(
                 "ISO 3166-2 level 4 code must be between 2 and 6 characters."
             )
 
-        # Validate ISO 3166-2 code
-        parts = self.iso3166_2_lvl4.split("-")
-        if len(parts) != 2:
-            raise ValueError("Invalid ISO 3166-2 format. Expected format: 'XX-YYY'.")
+        # Removing all country validation for now
 
-        country_code, subdivision_code = parts
+        # # Validate ISO 3166-2 code
+        # parts = self.iso3166_2_lvl4.split("-")
+        # if len(parts) != 2:
+        #     raise ValueError("Invalid ISO 3166-2 format. Expected format: 'XX-YYY'.")
 
-        # Validate country code
-        if not pycountry.countries.get(alpha_2=country_code):
-            raise ValueError(f"Invalid ISO 3166-1 country code: {country_code}")
+        # country_code, subdivision_code = parts
 
-        # Validate subdivision code
-        valid_subdivisions = {
-            sub.code.split("-")[1]
-            for sub in pycountry.subdivisions
-            if sub.country_code == country_code
-        }
-        if subdivision_code not in valid_subdivisions:
-            raise ValueError(
-                f"Invalid subdivision code '{subdivision_code}' for country '{country_code}'."
-            )
+        # # Validate country code
+        # if not pycountry.countries.get(alpha_2=country_code):
+        #     raise ValueError(f"Invalid ISO 3166-1 country code: {country_code}")
+
+        # # Validate subdivision code
+        # valid_subdivisions = {
+        #     sub.code.split("-")[1]
+        #     for sub in pycountry.subdivisions
+        #     if sub.country_code == country_code
+        # }
+        # if subdivision_code not in valid_subdivisions:
+        #     raise ValueError(
+        #         f"Invalid subdivision code '{subdivision_code}' for country '{country_code}'."
+        #     )
 
 
 @dataclass
@@ -113,11 +115,13 @@ class Port:
     type: PortType
     status: Status
     state: State
+    services: Optional[
+        Dict
+    ]  # Optional[Dict[str, Dict[str, List[List[int]]]]]  = field(
+    #     default_factory=lambda: {"l2vpn-ptp": {"vlan_range": [[1, 4095]]}}
+    # )
     mtu: Optional[int] = 1500
     nni: Optional[str] = ""
-    services: Optional[Dict[str, Dict[str, List[List[int]]]]] = field(
-        default_factory=lambda: {"l2vpn-ptp": {"vlan_range": [[1, 4095]]}}
-    )
     entities: Optional[List[str]] = field(default_factory=list)
 
     def __post_init__(self):
@@ -135,23 +139,23 @@ class Port:
             ):
                 raise ValueError(f"Invalid NNI format: {self.nni}")
 
-        if not self.services:
-            self.services = {"l2vpn-ptp": {"vlan_range": [[1, 4095]]}}
+        # if not self.services:
+        #     self.services = {"l2vpn-ptp": {"vlan_range": [[1, 4095]]}}
 
-        for service, attributes in self.services.items():
-            if service not in {"l2vpn-ptp", "l2vpn-ptmp"}:
-                raise ValueError(
-                    f"Unsupported service: {service}. Must be 'l2vpn-ptp' or 'l2vpn-ptmp'"
-                )
+        # for service, attributes in self.services.items():
+        #     if service not in {"l2vpn-ptp", "l2vpn-ptmp"}:
+        #         raise ValueError(
+        #             f"Unsupported service: {service}. Must be 'l2vpn-ptp' or 'l2vpn-ptmp'"
+        #         )
 
-            vlan_ranges = attributes.get("vlan_range", [])
-            for vlan_range in vlan_ranges:
-                if len(vlan_range) != 2 or not (
-                    1 <= vlan_range[0] < vlan_range[1] <= 4095
-                ):
-                    raise ValueError(
-                        f"Invalid VLAN range: {vlan_range}. Must be between 1 and 4095, and first value must be smaller than the second."
-                    )
+        #     vlan_ranges = attributes.get("vlan_range", [])
+        #     for vlan_range in vlan_ranges:
+        #         if len(vlan_range) != 2 or not (
+        #             1 <= vlan_range[0] < vlan_range[1] <= 4095
+        #         ):
+        #             raise ValueError(
+        #                 f"Invalid VLAN range: {vlan_range}. Must be between 1 and 4095, and first value must be smaller than the second."
+        #             )
 
     def __hash__(self):
         """Make Port hashable by using its unique ID."""
@@ -164,8 +168,8 @@ class Node:
     id: str
     location: Location
     ports: List[Port]
-    status: Status
-    state: State
+    status: Optional[Status] = None  # Allow missing values to pass current topology
+    state: Optional[State] = None
 
     def __post_init__(self):
         if not NAME_PATTERN.match(self.name) or len(self.name) > 30:
