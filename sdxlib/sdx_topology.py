@@ -25,7 +25,7 @@ URN_PORT_PATTERN = re.compile(
 )
 # Matches link URNs: urn:sdx:link:<oxp_url>:<link_name>
 URN_LINK_PATTERN = re.compile(
-    r"^urn:sdx:link:[a-zA-Z0-9.-]+\.[a-zA-Z]{2,3}:[\w.,\-/]{1,30}$"
+    r"^urn:sdx:link:[\w.,\-/:_]{1,255}$"        #[a-zA-Z0-9.-]+\.[a-zA-Z]{2,3}:[\w.,\-/]{1,30}$"
 )
 
 
@@ -200,8 +200,8 @@ class Link:
     private: Optional[List[str]] = field(default_factory=list)
 
     def __post_init__(self):
-        if not NAME_PATTERN.match(self.name) or len(self.name) > 30:
-            raise ValueError(f"Invalid link name: {self.name}")
+        # if not NAME_PATTERN.match(self.name) or len(self.name) > 30:
+        #     raise ValueError(f"Invalid link name: {self.name}")
         if not URN_LINK_PATTERN.match(self.id):
             raise ValueError(f"Invalid link ID format: {self.id}")
         if len(self.ports) != 2:
