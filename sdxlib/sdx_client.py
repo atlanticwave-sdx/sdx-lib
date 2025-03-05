@@ -6,6 +6,7 @@ import re
 import requests
 import sys
 
+from dacite import from_dict, Config
 from IPython.display import display
 from requests.exceptions import RequestException, HTTPError, Timeout
 from typing import Optional, List, Dict, Union, Tuple
@@ -1179,8 +1180,11 @@ class SDXClient:
             )
             response.raise_for_status()
 
-            # First, parse the raw response
-            raw_topology = SDXTopologyResponse.from_json(response.json())
+            # # First, parse the raw response
+            # raw_topology = SDXTopologyResponse.from_json(response.json())
+
+            # Use `Config` to automatically handle `None` values
+            raw_topology = from_dict(SDXTopologyResponse, response.json(), config=Config(strict=False))
 
             # print(f"DEBUG: get_topology() returned {type(raw_topology)}")
 
