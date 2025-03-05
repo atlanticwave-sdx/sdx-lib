@@ -115,7 +115,9 @@ class Port:
     type: PortType
     status: Status
     state: State
-    services: Optional[Dict] # Optional[Dict[str, Dict[str, List[List[int]]]]]  = field(
+    services: Optional[
+        Dict
+    ]  # Optional[Dict[str, Dict[str, List[List[int]]]]]  = field(
     #     default_factory=lambda: {"l2vpn-ptp": {"vlan_range": [[1, 4095]]}}
     # )
     mtu: Optional[int] = 1500
@@ -158,6 +160,7 @@ class Port:
     def __hash__(self):
         """Make Port hashable by using its unique ID."""
         return hash(self.id)
+
 
 @dataclass
 class Node:
