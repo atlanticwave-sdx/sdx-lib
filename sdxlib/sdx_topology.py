@@ -247,32 +247,32 @@ class Topology:
     id: str
     version: str
     timestamp: str
+    nodes: Dict[str, Node] # = field(default_factory=list)
+    services: Optional[List[str]] = field(default_factory=lambda: ["l2vpn-ptp"])
     # Adding optional to the str. Issue #418 on SDXController has been filed to correct this such that model_version only supports "2.0.0"
     model_version: Optional[str] = MODEL_VERSION or None
-    nodes: List[Node] = field(default_factory=list)
     links: List[Link] = field(default_factory=list)
-    services: Optional[List[str]] = field(default_factory=lambda: ["l2vpn-ptp"])
 
     port_lookup: Dict[str, Port] = field(default_factory=dict)
 
     def __post_init__(self):
         """Automatically populates lookup dictionaries for fast searching."""
 
-        # Run validation logic on the parsed data
-        if not NAME_PATTERN.match(self.name) or len(self.name) > 30:
-            raise ValueError(f"Invalid topology name: {self.name}")
-        if not URN_TOPOLOGY_PATTERN.match(self.id):
-            raise ValueError(f"Invalid topology ID format: {self.id}")
-        if self.version < 1:
-            raise ValueError("Version must be at least 1.")
-        if not TIMESTAMP_PATTERN.match(self.timestamp):
-            raise ValueError("Invalid timestamp format. Expected YYYY-MM-DDTHH:mm:SSZ.")
+        # # Run validation logic on the parsed data
+        # if not NAME_PATTERN.match(self.name) or len(self.name) > 30:
+        #     raise ValueError(f"Invalid topology name: {self.name}")
+        # if not URN_TOPOLOGY_PATTERN.match(self.id):
+        #     raise ValueError(f"Invalid topology ID format: {self.id}")
+        # if self.version < 1:
+        #     raise ValueError("Version must be at least 1.")
+        # if not TIMESTAMP_PATTERN.match(self.timestamp):
+        #     raise ValueError("Invalid timestamp format. Expected YYYY-MM-DDTHH:mm:SSZ.")
 
         # Make certain there is at least one node
         if not self.nodes:
             raise ValueError("Topology must have at least one node.")
-        if not all(isinstance(node, Node) for node in self.nodes):
-            raise TypeError("All elements in 'nodes' must be Node objects.")
+        # if not all(isinstance(node, Node) for node in self.nodes):
+        #     raise TypeError("All elements in 'nodes' must be Node objects.")
 
         # Ensure links are a list of Link objects (can be empty)
         if self.links is None:
@@ -282,17 +282,17 @@ class Topology:
         if not all(isinstance(link, Link) for link in self.links):
             raise TypeError("All elements in 'links' must be Link objects.")
 
-        # Ensure services contain only valid values
-        allowed_services = {"l2vpn-ptp", "l2vpn-ptmp"}
-        if self.services is None:
-            self.services = ["l2vpn-ptp"]  # Default if missing
-        elif not all(service in allowed_services for service in self.services):
-            raise ValueError(
-                f"Invalid service type. Must be one of {allowed_services}."
-            )
+        # # Ensure services contain only valid values
+        # allowed_services = {"l2vpn-ptp", "l2vpn-ptmp"}
+        # if self.services is None:
+        #     self.services = ["l2vpn-ptp"]  # Default if missing
+        # elif not all(service in allowed_services for service in self.services):
+        #     raise ValueError(
+        #         f"Invalid service type. Must be one of {allowed_services}."
+        #     )
 
         # Populate fast lookup table
-        for node in self.nodes:
+        for node in self.nodes.values():
             for port in node.ports:
                 self.port_lookup[port.id] = port
 
