@@ -215,10 +215,10 @@ class SDXTopologyResponse:
 
     name: str
     id: str
-    version: int
+    version: Union[str, int, float]
     timestamp: str
+    nodes: List[Node] #= field(default_factory=list)
     model_version: str = MODEL_VERSION
-    nodes: List[Node] = field(default_factory=list)
     links: List[Link] = field(default_factory=list)
     services: Optional[List[str]] = field(default_factory=lambda: ["l2vpn-ptp"])
 
@@ -228,16 +228,59 @@ class SDXTopologyResponse:
         Parses JSON response and returns an SDXTopologyResponse instance.
         Ensures latitude, longitude, and port type are cast to correct types.
         """
+        print("=== DEBUG: RESPONSE JSON STRUCTURE ===")
+        print(json.dumps(response_json, indent=2))
+
+        # Ensure `services` is a dictionary
+        if response_json.get("services"):
+            response_json["services"] = {
+                k: v if isinstance(v, dict) else {} for k, v in response_json["services"].items()
+            }
+
+        # Iterate over nodes and ports to validate `services` structure
+        for node in response_json.get("nodes", []):
+            for port in node.get("ports", []):
+                # Ensure `services` exists and is a dictionary
+                if not isinstance(port.get("services"), dict):
+                    print(f"Invalid 'services' format in port {port.get('id', 'UNKNOWN')}: {port.get('services')}")
+                    port["services"] = {}  # Convert to empty dict if invalid
+
+                # Validate `vlan_range` inside `services`
+                for service_name, service_data in port["services"].items():
+                    if isinstance(service_data, dict) and "vlan_range" in service_data:
+                        if not isinstance(service_data["vlan_range"], list):
+                            print(
+                                f"Fixing vlan_range in {port.get('id', 'UNKNOWN')} for service {service_name}: {service_data['vlan_range']}"
+                            )
+                            # Convert to list **only if it's a single range**
+                            if isinstance(service_data["vlan_range"], (int, str)):
+                                service_data["vlan_range"] = [[int(service_data["vlan_range"])]]  # Wrap in nested list
+                            elif isinstance(service_data["vlan_range"], dict):
+                                # Convert a dict to a list format
+                                service_data["vlan_range"] = [[k, v] for k, v in service_data["vlan_range"].items()]
+                            else:
+                                service_data["vlan_range"] = [service_data["vlan_range"]]  # Default wrapping
+
+        # Print keys and types for debugging
+        for key, value in response_json.items():
+            print(f"Key: {key}, Type: {type(value)}")
+
+        # Convert `nodes` from list to dictionary if necessary
+        if isinstance(response_json.get("nodes"), list):
+            response_json["nodes"] = {node["id"]: node for node in response_json["nodes"]}
+
+        # Convert `services` from dictionary to list if necessary
+        if isinstance(response_json.get("services"), dict):
+            response_json["services"] = list(response_json["services"].keys())
+
         config = Config(
             cast=[Status, State, LinkType],
             type_hooks={
-                float: lambda v: float(v)
-                if isinstance(v, str)
-                else v,  # Convert lat/lon to float
-                PortType: lambda v: PortType(v)
-                if isinstance(v, str)
-                else v,  # Convert port type to enum
+                float: lambda v: float(v) if isinstance(v, str) else v,  # Convert lat/lon to float
+                PortType: lambda v: PortType(v) if isinstance(v, str) else v,  # Convert port type to enum
                 LinkType: lambda v: LinkType(v) if isinstance(v, str) else v,
             },
         )
+
+        print("=== DEBUG: CONVERTING TOPOLOGY ===")
         return from_dict(Topology, response_json, config=config)
