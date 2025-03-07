@@ -62,9 +62,7 @@ class TokenAuthentication:
             self.token_kid = self.token_header.get("kid", None)
 
             # Decode JWT token without verifying the signature (useful for debugging)
-            self.token_decoded = jwt.decode(
-                self.fabric_token, options={"verify_signature": False}
-            )
+            self.token_decoded = jwt.decode(self.fabric_token, options={"verify_signature": False})
 
             self.token_iss = self.token_decoded.get("iss", None)  # Issuer
             self.token_aud = self.token_decoded.get("aud", None)  # Audience
@@ -101,12 +99,7 @@ class TokenAuthentication:
             hostname (str, optional): The hostname to ping. Defaults to 'sdxapi.atlanticwave-sdx.ai'.
         """
         try:
-            result = subprocess.run(
-                ["ping", "-c", "4", hostname],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
+            result = subprocess.run(["ping", "-c", "4", hostname], capture_output=True, text=True, check=True)
             print("Ping:")
             print(result.stdout)  # Print the output of the ping command
         except subprocess.CalledProcessError as e:
@@ -148,7 +141,7 @@ class TokenAuthentication:
 
         headers = {
             "Content-Type": "application/json",  # Ensure JSON format
-            "Authorization": f"Bearer {self.fabric_token}",  # Use the decoded token
+            "Authorization": f"Bearer {self.fabric_token}"  # Use the decoded token
         }
 
         try:
