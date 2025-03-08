@@ -20,6 +20,10 @@ class TokenAuthentication:
 
         Args:
             token_path (str, optional): Path to the token file. Defaults to None.
+            eppn (str, optional): The eppn (Education Person Persistent Identifier) 
+            is a claim or attribute often included in authentication tokens,
+            particularly in the context of Federated Identity systems, 
+            such as those used in higher education and research institutions.
             endpoint (str, optional): The API endpoint to validate the token against. Defaults to 'sax.net/sdx/topology'.
             slice_name (str, optional): The name of the slice to initialize. Defaults to "Slice-AWSDX".
         """
@@ -27,6 +31,7 @@ class TokenAuthentication:
         self.fabric_token = None
         self.token_header = None
         self.token_payload = None
+        self.token_eppn = None
         self.token_kid = None
         self.token_decoded = None
         self.token_iss = None
@@ -64,6 +69,7 @@ class TokenAuthentication:
             # Decode JWT token without verifying the signature (useful for debugging)
             self.token_decoded = jwt.decode(self.fabric_token, options={"verify_signature": False})
 
+            self.token_eppn = self.token_decoded.get("eppn", None)  # Eduperson Persistent Identifier
             self.token_iss = self.token_decoded.get("iss", None)  # Issuer
             self.token_aud = self.token_decoded.get("aud", None)  # Audience
 
