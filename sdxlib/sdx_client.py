@@ -5,6 +5,9 @@ import requests
 from typing import Optional, List, Dict, Union
 from requests.exceptions import RequestException, HTTPError, Timeout
 
+# Import the TokenAuthentication class from sdxlib.sdx_token_auth
+from sdxlib.sdx_token_auth import TokenAuthentication
+
 from sdxlib.sdx_exception import SDXException
 from sdxlib.sdx_response import SDXResponse
 
@@ -39,7 +42,6 @@ class SDXClient:
 
     def __init__(
         self,
-        fabric_token = None,
         base_url: Optional[str] = None,
         name: Optional[str] = None,
         endpoints: Optional[List[Dict[str, str]]] = None,
@@ -47,6 +49,7 @@ class SDXClient:
         notifications: Optional[List[Dict[str, str]]] = None,
         scheduling: Optional[Dict[str, str]] = None,
         qos_metrics: Optional[Dict[str, Dict[str, Union[int, bool]]]] = None,
+        fabric_token: Optional[str] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
         """Initializes an instance of SDXClient.
@@ -61,14 +64,14 @@ class SDXClient:
         - qos_metrics (Optional[Dict[str, str]]): Quality of service metrics (default: None).
         """
 
-        self.fabric_token = fabric_token
         self.base_url = base_url
         self.name = name
         self.endpoints = endpoints
         self.description = description
-        self.notifications = notifications
+        self.notifications = [{"email":TokenAuthentication().load_token().token_eppn}]
         self.scheduling = scheduling
         self.qos_metrics = qos_metrics
+        self.fabric_token = TokenAuthentication().load_token().fabric_token
         self._logger = logger or logging.getLogger(__name__)
         self._request_cache = {}
 
@@ -837,6 +840,9 @@ class SDXClient:
             "Content-Type": "application/json",  # Ensure JSON format
             "Authorization": f"Bearer {self.fabric_token}"
         }
+
+        # response = requests.get(url, headers=headers, timeout=120)
+        # print(response.json())
         try:
             response = requests.get(url, headers=headers, timeout=120)
             response.raise_for_status()

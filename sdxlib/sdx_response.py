@@ -49,8 +49,21 @@ class SDXResponse:
         self.endpoints: List[Dict[str, str]] = self._validate_required(
             response_json, "endpoints", list, must_have_value=True
         )
+        self.current_path: List[str] = self._validate_required(
+            response_json, "current_path", list, must_have_value=True
+        )
+        self.ownership: str = ""
+        self.creation_date: str = ""
+        self.archived_date: str = ""
+        self.status: str = ""
+        self.state: str = ""
+        self.counters_location: str = ""
+        self.last_modified: str = ""
+        self.oxp_service_ids: Dict[str, List[str]] = ""
+        """
+        ****************
         self.ownership: str = self._validate_required(
-            response_json, "ownership", str, must_have_value=True
+                response_json, "ownership", str, must_have_value=True
         )
         self.creation_date: str = self._validate_required(
             response_json, "creation_date", str, must_have_value=True
@@ -70,12 +83,11 @@ class SDXResponse:
         self.last_modified: str = self._validate_required(
             response_json, "last_modified", str, must_have_value=True, default="0"
         )
-        self.current_path: List[str] = self._validate_required(
-            response_json, "current_path", list, must_have_value=True
-        )
         self.oxp_service_ids: Dict[str, List[str]] = self._validate_required(
             response_json, "oxp_service_ids", dict, must_have_value=True
         )
+        ****************
+        """
         # Optional fields - May be None
         self.description: Optional[str] = self._validate_optional(
             response_json, "description", str
@@ -158,7 +170,7 @@ class SDXResponse:
                 "description": self.description,
                 "qos_metrics": self.qos_metrics,
                 "notifications": self.notifications,
-                "ownership": self.ownership,
+                "ownership": self.notifications[0],
                 "creation_date": self.creation_date,
                 "archived_date": self.archived_date,
                 "status": self.status,
