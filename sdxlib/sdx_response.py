@@ -49,6 +49,9 @@ class SDXResponse:
         self.endpoints: List[Dict[str, str]] = self._validate_required(
             response_json, "endpoints", list, must_have_value=True
         )
+        self.current_path: List[str] = self._validate_required(
+            response_json, "current_path", list, must_have_value=True
+        )
         self.ownership: str = ""
         self.creation_date: str = ""
         self.archived_date: str = ""
@@ -56,6 +59,7 @@ class SDXResponse:
         self.state: str = ""
         self.counters_location: str = ""
         self.last_modified: str = ""
+        self.oxp_service_ids: Dict[str, List[str]] = ""
         """
         ****************
         self.ownership: str = self._validate_required(
@@ -79,14 +83,11 @@ class SDXResponse:
         self.last_modified: str = self._validate_required(
             response_json, "last_modified", str, must_have_value=True, default="0"
         )
-        ****************
-        """
-        self.current_path: List[str] = self._validate_required(
-            response_json, "current_path", list, must_have_value=True
-        )
         self.oxp_service_ids: Dict[str, List[str]] = self._validate_required(
             response_json, "oxp_service_ids", dict, must_have_value=True
         )
+        ****************
+        """
         # Optional fields - May be None
         self.description: Optional[str] = self._validate_optional(
             response_json, "description", str
