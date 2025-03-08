@@ -49,7 +49,7 @@ class SDXClient:
         notifications: Optional[List[Dict[str, str]]] = None,
         scheduling: Optional[Dict[str, str]] = None,
         qos_metrics: Optional[Dict[str, Dict[str, Union[int, bool]]]] = None,
-        fabric_token = Optional[str] = None,
+        fabric_token: Optional[str] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
         """Initializes an instance of SDXClient.
@@ -68,7 +68,7 @@ class SDXClient:
         self.name = name
         self.endpoints = endpoints
         self.description = description
-        self.notifications = [{"email":TokenAuthentication().load_token().eppn}]
+        self.notifications = [{"email":TokenAuthentication().load_token().token_eppn}]
         self.scheduling = scheduling
         self.qos_metrics = qos_metrics
         self.fabric_token = TokenAuthentication().load_token().fabric_token
@@ -840,6 +840,9 @@ class SDXClient:
             "Content-Type": "application/json",  # Ensure JSON format
             "Authorization": f"Bearer {self.fabric_token}"
         }
+
+        # response = requests.get(url, headers=headers, timeout=120)
+        # print(response.json())
         try:
             response = requests.get(url, headers=headers, timeout=120)
             response.raise_for_status()

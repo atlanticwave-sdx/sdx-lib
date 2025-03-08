@@ -73,11 +73,6 @@ class TokenAuthentication:
             self.token_iss = self.token_decoded.get("iss", None)  # Issuer
             self.token_aud = self.token_decoded.get("aud", None)  # Audience
 
-            # print(f"FABRIC JWT Token: {self.fabric_token}")
-            # print("Decoded Token Claims:")
-            # for key, value in self.token_decoded.items():
-            #    print(f"   {key}: {value}")
-            print("The Token has been successfully decoded!!!")
             return self
 
         except json.JSONDecodeError:
