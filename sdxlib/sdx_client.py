@@ -174,6 +174,7 @@ class SDXClient:
 
             if format == "dataframe":
                 df = pd.DataFrame(port_list)
+                pd.set_option("display.max_rows", None)  # Show all rows
                 pd.set_option("display.max_colwidth", None)  # Ensure full text is displayed
                 return df
 
