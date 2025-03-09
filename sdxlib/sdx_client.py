@@ -160,17 +160,22 @@ class SDXClient:
             self._logger.info(f"Topology retrieval request sent to {url}.")
             self._logger.debug(f"Full response: {data}")
 
-            # Extract available ports
+            # Extract available ports with entities
             port_list = [
-                {"Port ID": port.get("id"), "Status": port.get("status")}
+                {
+                    "Port ID": port.get("id"),
+                    "Status": port.get("status"),
+                    "Entities": ", ".join(port.get("entities", []))  # Convert list to comma-separated string
+                }
                 for node in data.get("nodes", [])
                 for port in node.get("ports", [])
                 if port.get("status") == "up" and not port.get("nni")
             ]
 
-            # Return in the requested format
             if format == "dataframe":
-                return pd.DataFrame(port_list)
+                df = pd.DataFrame(port_list)
+                pd.set_option("display.max_colwidth", None)  # Ensure full text is displayed
+                return df
 
             if format == "json":
                 return port_list
