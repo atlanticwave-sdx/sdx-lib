@@ -228,13 +228,23 @@ class SDXValidator:
     @staticmethod
     def handle_http_error(logger: logging.Logger, e: HTTPError, operation: str) -> None:
         """Handles HTTP errors by logging and raising an SDXException."""
-        status_code = e.response.status_code
-        error_details = None
+        logger.error(f"HTTP error occurred during {operation}: {e}")
 
+        error_details = None
+        status_code = getattr(e.response, "status_code", "Unknown")
+        
         try:
-            error_details = e.response.json().get("error", None)
-        except ValueError:
-            error_details = e.response.text
+            # Check if response content is JSON before attempting to parse
+            if "application/json" in e.response.headers.get("Content-Type", ""):
+                try:
+                    error_json = e.response.json()
+                    error_details = error_json.get("error", "No detailed error provided.") if isinstance(error_json, dict) else str(error_json)
+                except ValueError:
+                    error_details = "Invalid JSON response"
+            else:
+                error_details = e.response.text  # Use raw text if not JSON
+        except AttributeError:
+            error_details = "Error details unavailable"
 
         method_messages = {
             201: "L2VPN Service Created",
@@ -251,9 +261,9 @@ class SDXValidator:
         error_message = method_messages.get(status_code, "Unknown error occurred.")
         logger.error(f"Failed to {operation}. Status code: {status_code}: {error_message}")
 
-        raise SDXException(
-            status_code=status_code,
-            method_messages=method_messages,
-            message=error_message,
-            error_details=error_details
-        )
+        return {
+            "status_code": status_code,
+            "method_messages": method_messages,
+            "message": error_message,
+            "error_details": error_details
+        }
