@@ -228,9 +228,6 @@ class SDXClient:
         else:
             print(f"No ports found matching search term: '{search}'")
     
-        # Return results in requested format
-        # return pd.DataFrame(available_ports) if format == "dataframe" else available_ports
-
     def get_l2vpn(self, service_id: str, format: str = "dataframe") -> Union[pd.DataFrame, SDXResponse]:
         """
         Retrieves details of an existing L2VPN using the provided service ID.
@@ -296,7 +293,6 @@ class SDXClient:
         response = self._make_request(
             "GET", url, self._get_headers(), operation="retrieve all L2VPNs")
 
-        print(response)
         # Convert JSON response to SDXResponse objects
         l2vpns = {
             service_id: SDXResponse(
