@@ -2,8 +2,6 @@ import os
 import json
 import jwt  # PyJWT library for decoding JWT tokens
 import requests
-import subprocess
-import socket
 
 
 class TokenAuthentication:
@@ -31,6 +29,7 @@ class TokenAuthentication:
         self.fabric_token = None
         self.token_header = None
         self.token_payload = None
+        self.token_sub = None
         self.token_eppn = None
         self.token_kid = None
         self.token_decoded = None
@@ -69,6 +68,7 @@ class TokenAuthentication:
             # Decode JWT token without verifying the signature (useful for debugging)
             self.token_decoded = jwt.decode(self.fabric_token, options={"verify_signature": False})
 
+            self.token_sub = self.token_decoded.get("sub", None)  # unique identifier for the use
             self.token_eppn = self.token_decoded.get("eppn", None)  # Eduperson Persistent Identifier
             self.token_iss = self.token_decoded.get("iss", None)  # Issuer
             self.token_aud = self.token_decoded.get("aud", None)  # Audience
@@ -81,51 +81,6 @@ class TokenAuthentication:
             print("Error: Failed to decode JWT token!")
         except Exception as e:
             print(f"Unexpected Error: {e}")
-
-    def trace_route(self, hostname="sdxapi.atlanticwave-sdx.ai"):
-        """
-        Perform a traceroute to the specified hostname.
-        
-        Args:
-            hostname (str, optional): The hostname to trace route. Defaults to 'sdxapi.atlanticwave-sdx.ai'.
-        """
-        print("Trace Route:")
-        os.system(f"traceroute {hostname}")
-
-    def ping_host(self, hostname="sdxapi.atlanticwave-sdx.ai"):
-        """
-        Ping the specified hostname and print the result.
-        
-        Args:
-            hostname (str, optional): The hostname to ping. Defaults to 'sdxapi.atlanticwave-sdx.ai'.
-        """
-        try:
-            result = subprocess.run(["ping", "-c", "4", hostname], capture_output=True, text=True, check=True)
-            print("Ping:")
-            print(result.stdout)  # Print the output of the ping command
-        except subprocess.CalledProcessError as e:
-            print(f"Ping failed:\n{e.stderr}")
-
-    def check_connection(self, hostname="sdxapi.atlanticwave-sdx.ai", port=443):
-        """
-        Check the connection to a specific port using both 'nc' and 'socket'.
-        
-        Args:
-            hostname (str, optional): The target hostname. Defaults to 'sdxapi.atlanticwave-sdx.ai'.
-            port (int, optional): The port number to check. Defaults to 443.
-        """
-        try:
-            os.system(f"nc -vz -w 10 {hostname} {port}")
-            print(f"nc Connection successful to {hostname}:{port}")
-        except Exception as e:
-            print(f"Connection failed with nc: {e}")
-
-        try:
-            sock = socket.create_connection((hostname, port), timeout=10)
-            print(f"Socket Connection successful to {hostname}:{port}")
-            sock.close()
-        except Exception as e:
-            print(f"Connection failed with socket: {e}")
 
     def validate_token(self):
         """

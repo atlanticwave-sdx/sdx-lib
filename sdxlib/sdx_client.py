@@ -21,6 +21,7 @@ class SDXClient:
         base_url: str,
         name: Optional[str] = None,
         endpoints: Optional[List[Dict[str, str]]] = None,
+        ownership: Optional[str] = None,
         description: Optional[str] = None,
         notifications: Optional[List[Dict[str, str]]] = None,
         scheduling: Optional[Dict[str, str]] = None,
@@ -32,12 +33,17 @@ class SDXClient:
         self.base_url = SDXValidator.validate_non_empty_string(base_url, "Base URL")
         self.name = SDXValidator.validate_name(name)
         self.endpoints = SDXValidator.validate_endpoints(endpoints)
+        self.ownership = (
+            ownership if ownership is not None
+            else TokenAuthentication().load_token().token_sub
+        )
+        self.ownership = SDXValidator.validate_ownership(self.ownership)
         self.description = SDXValidator.validate_description(description)
         self.notifications = (
             notifications if notifications is not None
             else [{"email": TokenAuthentication().load_token().token_eppn}]
         )
-        self.notifications = SDXValidator.validate_notifications(self.notifications)
+        self.notifications = SDXValidayytor.validate_notifications(self.notifications)
         self.scheduling = SDXValidator.validate_scheduling(scheduling)
         self.qos_metrics = SDXValidator.validate_qos_metrics(qos_metrics)
         self.fabric_token = fabric_token or TokenAuthentication().load_token().fabric_token
@@ -250,6 +256,14 @@ class SDXClient:
         service_id = sdx_response.service_id
         name = sdx_response.name
 
+        # Extract endpoint details
+        endpoints = [
+            {"port_id": ep.get("port_id", "Unknown"), "vlan": ep.get("vlan", "Unknown")}
+            for ep in sdx_response.endpoints
+        ]
+
+        ownership = sdx_response.ownership
+
         notifications = ", ".join(
             str(n.get("email", "Unknown")) if isinstance(n, dict) else str(n) 
             for n in sdx_response.notifications
@@ -258,18 +272,12 @@ class SDXClient:
         scheduling = str(sdx_response.scheduling or "None")
         qos_metrics = str(sdx_response.qos_metrics or "None")
 
-        # Extract endpoint details
-        endpoints = [
-            {"port_id": ep.get("port_id", "Unknown"), "vlan": ep.get("vlan", "Unknown")}
-            for ep in sdx_response.endpoints
-        ]
-
         # Return JSON or DataFrame format
         if format == "dataframe":
             return pd.DataFrame([
                 {"Service ID": service_id, "Name": name, "Port ID": ep["port_id"], "VLAN": ep["vlan"],
-                 "Endpoints": str(endpoints), "Notifications": notifications, "Scheduling": scheduling,
-                 "QoS Metrics": qos_metrics}
+                 "Endpoints": str(endpoints), "Ownership": ownership, "Notifications": notifications,
+                 "Scheduling": scheduling, "QoS Metrics": qos_metrics}
                 for ep in endpoints
             ])
     
@@ -277,6 +285,7 @@ class SDXClient:
             "Service ID": service_id,
             "Name": name,
             "Endpoints": endpoints,
+            "Ownership": ownership,
             "Notifications": notifications,
             "Scheduling": scheduling,
             "QoS Metrics": qos_metrics,
@@ -309,6 +318,14 @@ class SDXClient:
         for service_id, sdx_response in l2vpns.items():
             name = sdx_response.name
 
+            # Extract endpoints
+            endpoints = [
+                {"port_id": ep.get("port_id", "Unknown"), "vlan": ep.get("vlan", "Unknown")}
+                for ep in sdx_response.endpoints
+            ]
+
+            ownership = sdx_response.ownership
+
             # Extract notifications safely
             notifications = ", ".join(
                 str(n.get("email", "Unknown")) if isinstance(n, dict) else str(n)
@@ -318,16 +335,11 @@ class SDXClient:
             scheduling = str(sdx_response.scheduling or "None")
             qos_metrics = str(sdx_response.qos_metrics or "None")
 
-            # Extract endpoints
-            endpoints = [
-                {"port_id": ep.get("port_id", "Unknown"), "vlan": ep.get("vlan", "Unknown")}
-                for ep in sdx_response.endpoints
-            ]
-
             formatted_l2vpns.append({
                 "Service ID": service_id,
                 "Name": name,
                 "Endpoints": endpoints,
+                "Ownership": ownership,
                 "Notifications": notifications,
                 "Scheduling": scheduling,
                 "QoS Metrics": qos_metrics,
@@ -342,6 +354,7 @@ class SDXClient:
                 "Service ID": service_id,
                 "Name": sdx_response.name,
                 "Endpoints": sdx_response.endpoints,
+                "Ownership": sdx_response.ownership,
                 "Notifications": sdx_response.notifications,
                 "Scheduling": sdx_response.scheduling,
                 "QoS Metrics": sdx_response.qos_metrics
@@ -357,6 +370,7 @@ class SDXClient:
             key: value for key, value in {
                 "name": self.name,
                 "endpoints": self.endpoints,
+                "ownership": self.ownership,
                 "description": self.description,
                 "notifications": self.notifications,
                 "scheduling": self.scheduling,
