@@ -9,7 +9,7 @@ of the code have been executed, then analyzes
 the source to identify code that could have
 been executed but was not.
 
-To utilize the coverage module:  
+To utilize the coverage module:
     coverage run -m unittest discover -v tests
     coverage report -m
 """

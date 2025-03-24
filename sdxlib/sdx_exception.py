@@ -11,16 +11,22 @@ class SDXException(Exception):
     """
 
     def __init__(
-        self, status_code=None, method_messages=None, message=None, error_details=None
+        self,
+        status_code=None,
+        method_messages=None,
+        message=None,
+        error_details=None,
     ):
-        """Initializes an SDXException with status code, message, and optional error details.
+        """Initializes an SDXException with status code, message,
+        and optional error details.
 
         Args:
             status_code (int): HTTP status code.
             method_messages (dict, optional): Dictionary mapping error codes to
                 specific messages for a particular method.
             message (str): General error message.
-            error_details (str, optional): Additional error details from the API response.
+            error_details (str, optional): Additional error details from the
+                API response.
 
         """
         self.status_code = status_code

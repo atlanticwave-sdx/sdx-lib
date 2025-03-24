@@ -4,5 +4,9 @@ setup(
     name="sdxlib",
     version="0.1",
     packages=find_packages(),
-    install_requires=["requests", "pycountry", "dacite",],
+    install_requires=[
+        "requests",
+        "pycountry",
+        "dacite",
+    ],
 )

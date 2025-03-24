@@ -20,9 +20,9 @@ class TokenAuthentication:
 
         Args:
             token_path (str, optional): Path to the token file. Defaults to None.
-            eppn (str, optional): The eppn (Education Person Persistent Identifier) 
+            eppn (str, optional): The eppn (Education Person Persistent Identifier)
             is a claim or attribute often included in authentication tokens,
-            particularly in the context of Federated Identity systems, 
+            particularly in the context of Federated Identity systems,
             such as those used in higher education and research institutions.
             endpoint (str, optional): The API endpoint to validate the token against. Defaults to 'sax.net/sdx/topology'.
             slice_name (str, optional): The name of the slice to initialize. Defaults to "Slice-AWSDX".
@@ -43,9 +43,9 @@ class TokenAuthentication:
     def load_token(self):
         """
         Load and decode the JWT token from the token file.
-        
-        Reads the token JSON file, decodes the JWT, and extracts key claims 
-        such as the 'kid', 'iss', and 'aud'. Handles errors related to missing 
+
+        Reads the token JSON file, decodes the JWT, and extracts key claims
+        such as the 'kid', 'iss', and 'aud'. Handles errors related to missing
         token files or invalid token formats.
         """
         if not os.path.exists(self.token_path):
@@ -67,9 +67,13 @@ class TokenAuthentication:
             self.token_kid = self.token_header.get("kid", None)
 
             # Decode JWT token without verifying the signature (useful for debugging)
-            self.token_decoded = jwt.decode(self.fabric_token, options={"verify_signature": False})
+            self.token_decoded = jwt.decode(
+                self.fabric_token, options={"verify_signature": False}
+            )
 
-            self.token_eppn = self.token_decoded.get("eppn", None)  # Eduperson Persistent Identifier
+            self.token_eppn = self.token_decoded.get(
+                "eppn", None
+            )  # Eduperson Persistent Identifier
             self.token_iss = self.token_decoded.get("iss", None)  # Issuer
             self.token_aud = self.token_decoded.get("aud", None)  # Audience
 
@@ -85,7 +89,7 @@ class TokenAuthentication:
     def trace_route(self, hostname="sdxapi.atlanticwave-sdx.ai"):
         """
         Perform a traceroute to the specified hostname.
-        
+
         Args:
             hostname (str, optional): The hostname to trace route. Defaults to 'sdxapi.atlanticwave-sdx.ai'.
         """
@@ -95,21 +99,28 @@ class TokenAuthentication:
     def ping_host(self, hostname="sdxapi.atlanticwave-sdx.ai"):
         """
         Ping the specified hostname and print the result.
-        
+
         Args:
             hostname (str, optional): The hostname to ping. Defaults to 'sdxapi.atlanticwave-sdx.ai'.
         """
         try:
-            result = subprocess.run(["ping", "-c", "4", hostname], capture_output=True, text=True, check=True)
+            result = subprocess.run(
+                ["ping", "-c", "4", hostname],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
             print("Ping:")
             print(result.stdout)  # Print the output of the ping command
         except subprocess.CalledProcessError as e:
             print(f"Ping failed:\n{e.stderr}")
 
-    def check_connection(self, hostname="sdxapi.atlanticwave-sdx.ai", port=443):
+    def check_connection(
+        self, hostname="sdxapi.atlanticwave-sdx.ai", port=443
+    ):
         """
         Check the connection to a specific port using both 'nc' and 'socket'.
-        
+
         Args:
             hostname (str, optional): The target hostname. Defaults to 'sdxapi.atlanticwave-sdx.ai'.
             port (int, optional): The port number to check. Defaults to 443.
@@ -142,7 +153,7 @@ class TokenAuthentication:
 
         headers = {
             "Content-Type": "application/json",  # Ensure JSON format
-            "Authorization": f"Bearer {self.fabric_token}"  # Use the decoded token
+            "Authorization": f"Bearer {self.fabric_token}",  # Use the decoded token
         }
 
         try:

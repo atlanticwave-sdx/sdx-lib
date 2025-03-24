@@ -20,7 +20,13 @@ class SDXResponse:
         oxp_service_ids (Optional[List[Dict[str, str]]]): A list of dictionaries containing OXP service IDs.
     """
 
-    ALLOWED_STATUS = {"up", "down", "error", "under provisioning", "maintenance"}
+    ALLOWED_STATUS = {
+        "up",
+        "down",
+        "error",
+        "under provisioning",
+        "maintenance",
+    }
     ALLOWED_STATE = {"enabled", "disabled"}
 
     def __init__(self, response_json: dict):
@@ -92,15 +98,15 @@ class SDXResponse:
         self.description: Optional[str] = self._validate_optional(
             response_json, "description", str
         )
-        self.notifications: Optional[List[Dict[str, str]]] = self._validate_optional(
-            response_json, "notifications", list
+        self.notifications: Optional[List[Dict[str, str]]] = (
+            self._validate_optional(response_json, "notifications", list)
         )
         self.scheduling: Optional[Dict[str, str]] = self._validate_optional(
             response_json, "scheduling", dict
         )
-        self.qos_metrics: Optional[
-            Dict[str, Dict[str, Union[int, bool]]]
-        ] = self._validate_optional(response_json, "qos_metrics", dict)
+        self.qos_metrics: Optional[Dict[str, Dict[str, Union[int, bool]]]] = (
+            self._validate_optional(response_json, "qos_metrics", dict)
+        )
 
         # Log successful validation
         self._logger.debug("SDXResponse successfully initialized.")
@@ -178,9 +184,11 @@ class SDXResponse:
                 "counters_location": self.counters_location,
                 "last_modified": self.last_modified,
                 "current_path": self.current_path,
-                "oxp_service_ids": [oxp["id"] for oxp in self.oxp_service_ids]
-                if isinstance(self.oxp_service_ids, list)
-                else self.oxp_service_ids,
+                "oxp_service_ids": (
+                    [oxp["id"] for oxp in self.oxp_service_ids]
+                    if isinstance(self.oxp_service_ids, list)
+                    else self.oxp_service_ids
+                ),
             },
             indent=4,
             ensure_ascii=False,
