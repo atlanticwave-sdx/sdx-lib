@@ -21,6 +21,7 @@ class SDXClient:
         base_url: str,
         name: Optional[str] = None,
         endpoints: Optional[List[Dict[str, str]]] = None,
+        ownership: Optional[str] = None,
         description: Optional[str] = None,
         notifications: Optional[List[Dict[str, str]]] = None,
         scheduling: Optional[Dict[str, str]] = None,
@@ -32,6 +33,11 @@ class SDXClient:
         self.base_url = SDXValidator.validate_non_empty_string(base_url, "Base URL")
         self.name = SDXValidator.validate_name(name)
         self.endpoints = SDXValidator.validate_endpoints(endpoints)
+        self.ownership = (
+            ownership if ownership is not None
+            else TokenAuthentication().load_token().token_sub
+        )
+        self.ownership = SDXValidator.validate_ownership(self.ownership)
         self.description = SDXValidator.validate_description(description)
         self.notifications = (
             notifications if notifications is not None
@@ -250,6 +256,14 @@ class SDXClient:
         service_id = sdx_response.service_id
         name = sdx_response.name
 
+        # Extract endpoint details
+        endpoints = [
+            {"port_id": ep.get("port_id", "Unknown"), "vlan": ep.get("vlan", "Unknown")}
+            for ep in sdx_response.endpoints
+        ]
+
+        ownership = sdx_response.ownership
+
         notifications = ", ".join(
             str(n.get("email", "Unknown")) if isinstance(n, dict) else str(n) 
             for n in sdx_response.notifications
@@ -258,18 +272,12 @@ class SDXClient:
         scheduling = str(sdx_response.scheduling or "None")
         qos_metrics = str(sdx_response.qos_metrics or "None")
 
-        # Extract endpoint details
-        endpoints = [
-            {"port_id": ep.get("port_id", "Unknown"), "vlan": ep.get("vlan", "Unknown")}
-            for ep in sdx_response.endpoints
-        ]
-
         # Return JSON or DataFrame format
         if format == "dataframe":
             return pd.DataFrame([
                 {"Service ID": service_id, "Name": name, "Port ID": ep["port_id"], "VLAN": ep["vlan"],
-                 "Endpoints": str(endpoints), "Notifications": notifications, "Scheduling": scheduling,
-                 "QoS Metrics": qos_metrics}
+                 "Endpoints": str(endpoints), "Ownership": ownership, "Notifications": notifications,
+                 "Scheduling": scheduling, "QoS Metrics": qos_metrics}
                 for ep in endpoints
             ])
     
@@ -277,22 +285,33 @@ class SDXClient:
             "Service ID": service_id,
             "Name": name,
             "Endpoints": endpoints,
+            "Ownership": ownership,
             "Notifications": notifications,
             "Scheduling": scheduling,
             "QoS Metrics": qos_metrics,
         }
 
     def get_all_l2vpns(
-        self, archived: bool = False, format: str = "dataframe"
+        self, archived: bool = False, format: str = "dataframe",
+        search: Optional[str] = None
         ) -> Union[pd.DataFrame, Dict[str, SDXResponse]]:
         """
-        Retrieves all L2VPNs, either archived or active.
+        Retrieves all L2VPNs, optionally filtered by service_id or name.
         """
         url = f"{self.base_url}/l2vpn/{self.VERSION}/archived" if archived else f"{self.base_url}/l2vpn/{self.VERSION}"
 
         response = self._make_request(
             "GET", url, self._get_headers(), operation="retrieve all L2VPNs")
 
+        if not response:
+            print("No L2VPNs retrieved.")
+            return pd.DataFrame() if format == "dataframe" else {}
+        
+        if not isinstance(response, dict):
+            print(f"[get_all_l2vpns] Warning: Expected a dict, got {type(response).__name__}")
+            print(f"Raw response: {response}")
+            return {response}
+        
         # Convert JSON response to SDXResponse objects
         l2vpns = {
             service_id: SDXResponse(
@@ -300,54 +319,41 @@ class SDXClient:
             ) for service_id,l2vpn_data in response.items()
         }
 
+        # Apply optional search filter
+        if search:
+            search = search.lower()
+            l2vpns = {
+                sid: l2vpn for sid, l2vpn in l2vpns.items()
+                if search in sid.lower() or search in (l2vpn.name or "").lower()
+            }
+        
         if not l2vpns:
             print("No L2VPNs found.")
             return None
 
-        # Extract relevant details
-        formatted_l2vpns = []
-        for service_id, sdx_response in l2vpns.items():
-            name = sdx_response.name
-
-            # Extract notifications safely
-            notifications = ", ".join(
-                str(n.get("email", "Unknown")) if isinstance(n, dict) else str(n)
-                for n in sdx_response.notifications
-            )
-
-            scheduling = str(sdx_response.scheduling or "None")
-            qos_metrics = str(sdx_response.qos_metrics or "None")
-
-            # Extract endpoints
-            endpoints = [
-                {"port_id": ep.get("port_id", "Unknown"), "vlan": ep.get("vlan", "Unknown")}
-                for ep in sdx_response.endpoints
-            ]
-
-            formatted_l2vpns.append({
-                "Service ID": service_id,
-                "Name": name,
-                "Endpoints": endpoints,
-                "Notifications": notifications,
-                "Scheduling": scheduling,
-                "QoS Metrics": qos_metrics,
-            })
-
-        # Return JSON or DataFrame format
-        if format == "dataframe":
-            return pd.DataFrame(formatted_l2vpns)
-
-        return [
+        formatted = [
             {
-                "Service ID": service_id,
-                "Name": sdx_response.name,
-                "Endpoints": sdx_response.endpoints,
-                "Notifications": sdx_response.notifications,
-                "Scheduling": sdx_response.scheduling,
-                "QoS Metrics": sdx_response.qos_metrics
+                "Service ID": sid,
+                "Name": l2vpn.name,
+                "Endpoints": [
+                    {"port_id": endpoint.get("port_id", "Unknown"), "vlan": endpoint.get("vlan", "Unknown")}
+                    for endpoint in l2vpn.endpoints
+                ],
+                "Ownership": l2vpn.ownership,
+                "Notifications": ", ".join(
+                    notification.get("email", "Unknown") if isinstance(notification, dict) else str(notification)
+                    for notification in l2vpn.notifications
+                ),
+                "Scheduling": str(l2vpn.scheduling or "None"),
+                "QoS Metrics": str(l2vpn.qos_metrics or "None")
             }
-            for service_id, sdx_response in l2vpns.items()
+            for sid, l2vpn in l2vpns.items()
         ]
+
+        if format == "dataframe":
+            return pd.DataFrame(formatted)
+
+        return formatted
 
     def _build_payload(self) -> dict:
         """ 
@@ -357,6 +363,7 @@ class SDXClient:
             key: value for key, value in {
                 "name": self.name,
                 "endpoints": self.endpoints,
+                "ownership": self.ownership,
                 "description": self.description,
                 "notifications": self.notifications,
                 "scheduling": self.scheduling,

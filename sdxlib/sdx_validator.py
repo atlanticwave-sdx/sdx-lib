@@ -1,5 +1,7 @@
 import logging
 import re
+import hashlib
+import base64
 from typing import Optional, List, Dict, Union
 from requests.exceptions import RequestException, HTTPError, Timeout
 
@@ -29,6 +31,36 @@ class SDXValidator:
         if name and (not isinstance(name, str) or len(name) > 50):
             raise ValueError("Name must be a non-empty string with max 50 characters.")
         return name
+
+    @staticmethod
+    def validate_ownership(ownership: Optional[str]) -> Optional[str]:
+        """ Validates the ownership attribute."""
+        if ownership and (
+                (
+                    not isinstance(ownership, str)
+                ) or 
+                (
+                    not ownership.startswith("http://cilogon.org/")
+                )
+            ):
+            raise ValueError(
+                "ownership must be string starting with http://cilogon.org/")
+        # Extract the last part after the last '/'
+        match = re.search(r"http://cilogon.org(/[^/]+/users/\d+)$", ownership)
+        if not match:
+            raise ValueError("Invalid ownership format. Unable to extract the required part.")
+        extracted_part = match.group(1)
+
+        # Hash the extracted part using SHA-256
+        sha256_hash = hashlib.sha256(extracted_part.encode()).digest()
+
+        # Encode in Base64 and shorten it
+        return base64.urlsafe_b64encode(sha256_hash).decode()[:16]  # Trim to 16 chars
+
+    @staticmethod
+    def verify_ownership(ownership: str, stored_hash: str) -> bool:
+        """Recomputes the hash from ownership and checks if it matches the stored hash."""
+        return validate_and_hash_ownership(ownership) == stored_hash
 
     @staticmethod
     def validate_description(description: Optional[str]) -> Optional[str]:
