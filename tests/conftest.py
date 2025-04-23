@@ -1,5 +1,7 @@
 import pytest
 
+from unittest.mock import patch
+
 @pytest.fixture
 def base_url():
     return "http://aw-sdx-controller.renci.org:8081/SDX-Controller"
@@ -21,3 +23,9 @@ def service_endpoints():
 @pytest.fixture
 def expected_service_id():
     return "e64f7146-5673-4e03-9d6d-95eafab657f9"
+
+@pytest.fixture(autouse=True)
+def mock_token_load():
+    with patch("sdxlib.sdx_token_auth.TokenAuthentication.load_token") as mock:
+        mock.return_value.token_eppn = "pi@sdx-email.org"
+        yield mock
