@@ -35,32 +35,26 @@ class SDXValidator:
     @staticmethod
     def validate_ownership(ownership: Optional[str]) -> Optional[str]:
         """ Validates the ownership attribute."""
-        if ownership and (
-                (
-                    not isinstance(ownership, str)
-                ) or 
-                (
-                    not ownership.startswith("http://cilogon.org/")
-                )
-            ):
+        if ownership is None:
+            ownership = TokenAuthentication().load_token().token_sub
+
+        if not isinstance(
+                ownership, str) or not ownership.startswith(
+                        "http://cilogon.org/"):
             raise ValueError(
-                "ownership must be string starting with http://cilogon.org/")
-        # Extract the last part after the last '/'
-        match = re.search(r"http://cilogon.org(/[^/]+/users/\d+)$", ownership)
-        if not match:
-            raise ValueError("Invalid ownership format. Unable to extract the required part.")
-        extracted_part = match.group(1)
+                    "Invalid sub claim. Must be a CILogon-issued sub string.")
 
-        # Hash the extracted part using SHA-256
-        sha256_hash = hashlib.sha256(extracted_part.encode()).digest()
+        # Hash the entire sub claim
+        sha256_hash = hashlib.sha256(ownership.encode("utf-8")).digest()
+        b64_encoded = base64.urlsafe_b64encode(sha256_hash).decode("utf-8")
 
-        # Encode in Base64 and shorten it
-        return base64.urlsafe_b64encode(sha256_hash).decode()[:16]  # Trim to 16 chars
+        # Return the first 16 characters of the encoded string (AW-SDX spec)
+        return b64_encoded[:16]
 
     @staticmethod
     def verify_ownership(ownership: str, stored_hash: str) -> bool:
         """Recomputes the hash from ownership and checks if it matches the stored hash."""
-        return validate_and_hash_ownership(ownership) == stored_hash
+        return validate_ownership(ownership) == stored_hash
 
     @staticmethod
     def validate_description(description: Optional[str]) -> Optional[str]:
@@ -72,31 +66,33 @@ class SDXValidator:
     @staticmethod
     def is_valid_email(email: str) -> bool:
         """Validates an email address format."""
-        if not isinstance(email, str):
-            return False
-        email_regex = r"^\S+@\S+$"
-        return re.match(email_regex, email) is not None
+        if isinstance(email, str):
+            return re.match(r"^\S+@\S+$", email)
+        return None
 
     @staticmethod
-    def validate_notifications(notifications: Optional[List[Dict[str, str]]]) -> Optional[List[Dict[str, str]]]:
+    def validate_notifications(
+            notifications: Optional[List[Dict[str, str]]]) -> Optional[List[Dict[str, str]]]:
         """ Validates the notifications attribute."""
         if notifications is None:
-            return None
+            notifications = [
+                    {"email": TokenAuthentication().load_token().token_eppn}
+                    ]
+
         if not isinstance(notifications, list):
             raise ValueError("Notifications must be provided as a list.")
         if len(notifications) > 10:
             raise ValueError("Notifications can contain at most 10 email addresses.")
 
-        validated_notifications = []
-        for notification in notifications:
-            if not isinstance(notification, dict):
-                raise ValueError("Each notification must be a dictionary.")
-            if "email" not in notification:
-                raise ValueError("Each notification dictionary must contain a key 'email'.")
-            if not SDXValidator.is_valid_email(notification["email"]):
-                raise ValueError(f"Invalid email address or email format: {notification['email']}")
-            validated_notifications.append(notification)
-        return validated_notifications
+        validated = []
+        for n in notifications:
+            if not isinstance(n, dict) or "email" not in n:
+                raise ValueError("Each notification must be a dict with an 'email' key.")
+            if not SDXValidator.is_valid_email(n["email"]):
+                raise ValueError(f"Invalid email format: {n['email']}")
+            validated.append(n)
+
+        return validated
 
     @staticmethod
     def _validate_vlan_range(vlan_range: str) -> Dict[str, str]:

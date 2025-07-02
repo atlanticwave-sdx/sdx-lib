@@ -10,7 +10,6 @@ from sdxlib.sdx_exception import SDXException
 from sdxlib.sdx_response import SDXResponse
 from sdxlib.sdx_validator import SDXValidator
 
-
 class SDXClient:
     """Client for interacting with the AtlanticWave-SDX L2VPN API."""
 
@@ -33,17 +32,9 @@ class SDXClient:
         self.base_url = SDXValidator.validate_non_empty_string(base_url, "Base URL")
         self.name = SDXValidator.validate_name(name)
         self.endpoints = SDXValidator.validate_endpoints(endpoints)
-        self.ownership = (
-            ownership if ownership is not None
-            else TokenAuthentication().load_token().token_sub
-        )
-        self.ownership = SDXValidator.validate_ownership(self.ownership)
+        self.ownership = ownership
         self.description = SDXValidator.validate_description(description)
-        self.notifications = (
-            notifications if notifications is not None
-            else [{"email": TokenAuthentication().load_token().token_eppn}]
-        )
-        self.notifications = SDXValidator.validate_notifications(self.notifications)
+        self.notifications = SDXValidator.validate_notifications(notifications)
         self.scheduling = SDXValidator.validate_scheduling(scheduling)
         self.qos_metrics = SDXValidator.validate_qos_metrics(qos_metrics)
         self.fabric_token = fabric_token or TokenAuthentication().load_token().fabric_token
@@ -414,3 +405,36 @@ class SDXClient:
                     "error_message": "Request Error",
                     "error_details": str(e)
                    }
+
+    def ownership_login(self) -> int:
+        """
+        Accesses SDX API login endpoint and validates ownership.
+        Returns:
+        int: HTTP status code from login endpoint or database validation.
+        """
+        try:
+            token_auth = TokenAuthentication().load_token()
+            sub = token_auth.token_sub
+            eppn = token_auth.token_eppn
+            email = token_auth.token_decoded.get("email")
+            self.ownership = SDXValidator.validate_ownership(sub)
+        except Exception as e:
+            return 401, None, f"Token or ownership derivation failed: {e}"
+
+        payload = {
+                "ownership": ownership,
+                "eppn": eppn or "",
+                "email": email or "",
+                "role": "researcher"
+                }
+
+        url = f"{self.base_url}/login/"
+        response = self._make_request("POST", url, self._get_headers(), payload)
+
+        if isinstance(response, dict):
+            status_code = response.get("status_code", 500)
+            self.ownership = ownership if status_code == 200 else None
+            return status_code
+        
+        self.ownership = None
+        return 500  # Unexpected response structure
