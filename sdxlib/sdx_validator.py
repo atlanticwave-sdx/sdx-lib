@@ -4,6 +4,7 @@ import hashlib
 import base64
 from typing import Optional, List, Dict, Union
 from requests.exceptions import RequestException, HTTPError, Timeout
+from sdxlib.sdx_token_auth import TokenAuthentication
 
 from sdxlib.sdx_exception import SDXException
 
