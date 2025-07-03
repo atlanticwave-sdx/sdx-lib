@@ -41,10 +41,13 @@ class SDXClient:
         self._logger = logger or logging.getLogger(__name__)
         self._request_cache = {}
 
-    def create_l2vpn(self) -> dict:
+    def create_l2vpn(self, name: str, endpoints: List[Dict[str, str]]) -> dict:
         """Creates an L2VPN."""
         # Perform validation using SDXValidator
         SDXValidator.validate_required_attributes(self.base_url, self.name, self.endpoints)
+
+        self.name = SDXValidator.validate_name(name)
+        self.endpoints = SDXValidator.validate_endpoints(endpoints)
 
         url = f"{self.base_url}/l2vpn/{self.VERSION}"
         payload = self._build_payload()
