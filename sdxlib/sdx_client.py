@@ -18,36 +18,29 @@ class SDXClient:
     def __init__(
         self,
         base_url: str,
-        name: Optional[str] = None,
-        endpoints: Optional[List[Dict[str, str]]] = None,
-        ownership: Optional[str] = None,
-        description: Optional[str] = None,
-        notifications: Optional[List[Dict[str, str]]] = None,
-        scheduling: Optional[Dict[str, str]] = None,
-        qos_metrics: Optional[Dict[str, Dict[str, Union[int, bool]]]] = None,
-        fabric_token: Optional[str] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
         """Initialize SDXClient instance."""
         self.base_url = SDXValidator.validate_non_empty_string(base_url, "Base URL")
-        self.name = SDXValidator.validate_name(name)
-        self.endpoints = SDXValidator.validate_endpoints(endpoints)
-        self.ownership = ownership
-        self.description = SDXValidator.validate_description(description)
-        self.notifications = SDXValidator.validate_notifications(notifications)
-        self.scheduling = SDXValidator.validate_scheduling(scheduling)
-        self.qos_metrics = SDXValidator.validate_qos_metrics(qos_metrics)
-        self.fabric_token = fabric_token or TokenAuthentication().load_token().fabric_token
+        self.fabric_token = TokenAuthentication().load_token().fabric_token
+        self.ownership = None # Enforced to be set later via ownership_login
+        self.name = None
+        self.endpoints = None
+        self.description = None
+        self.notifications = None
+        self.scheduling = None
+        self.qos_metrics = None
         self._logger = logger or logging.getLogger(__name__)
         self._request_cache = {}
 
     def create_l2vpn(self, name: str, endpoints: List[Dict[str, str]]) -> dict:
         """Creates an L2VPN."""
-        # Perform validation using SDXValidator
-        SDXValidator.validate_required_attributes(self.base_url, self.name, self.endpoints)
 
         self.name = SDXValidator.validate_name(name)
         self.endpoints = SDXValidator.validate_endpoints(endpoints)
+
+        # Perform validation using SDXValidator
+        SDXValidator.validate_required_attributes(self.base_url, self.name, self.endpoints)
 
         url = f"{self.base_url}/l2vpn/{self.VERSION}"
         payload = self._build_payload()
@@ -383,7 +376,15 @@ class SDXClient:
     ) -> dict:
         """
         Handles API requests with error handling and logging.
+        Skips ownership validation if operation is 'ownership login'.
         """
+        if operation != "ownership login" and not self.ownership:
+            raise SDXException(
+                status_code=400,
+                message="Missing ownership",
+                error_details="You must login before making any request."
+            )
+
         try:
             response = requests.request(
                 method, url, json=payload, headers=headers, timeout=120)
@@ -425,14 +426,14 @@ class SDXClient:
             return 401, None, f"Token or ownership derivation failed: {e}"
 
         payload = {
-                "ownership": ownership,
+                "ownership": self.ownership,
                 "eppn": eppn or "",
                 "email": email or "",
                 "role": "researcher"
                 }
 
         url = f"{self.base_url}/login/"
-        response = self._make_request("POST", url, self._get_headers(), payload)
+        response = self._make_request("POST", url, self._get_headers(), payload, "ownership login")
 
         if isinstance(response, dict):
             status_code = response.get("status_code", 500)
