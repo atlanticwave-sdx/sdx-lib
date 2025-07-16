@@ -410,7 +410,7 @@ class SDXClient:
                     "error_details": str(e)
                    }
 
-    def ownership_login(self) -> int:
+    def login(self) -> int:
         """
         Accesses SDX API login endpoint and validates ownership.
         Returns:
