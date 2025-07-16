@@ -410,7 +410,7 @@ class SDXClient:
                     "error_details": str(e)
                    }
 
-    def login(self) -> int:
+    def login(self, source: str = "fabric") -> dict:
         """
         Accesses SDX API login endpoint and validates ownership.
         Returns:
@@ -419,26 +419,31 @@ class SDXClient:
         try:
             token_auth = TokenAuthentication().load_token()
             sub = token_auth.token_sub
-            eppn = token_auth.token_eppn
-            email = token_auth.token_decoded.get("email")
             self.ownership = SDXValidator.validate_ownership(sub)
+            email = token_auth.token_decoded.get("email")
+            eppn = token_auth.token_eppn
+            given_name = token_auth.token_given_name
+            family_name = token_auth.token_family_name
         except Exception as e:
             return 401, None, f"Token or ownership derivation failed: {e}"
 
         payload = {
+                "source": source,
                 "ownership": self.ownership,
-                "eppn": eppn or "",
                 "email": email or "",
+                "eppn": eppn or "",
+                "first_name": given_name or "",
+                "last_name": family_name or "",
                 "role": "researcher"
                 }
 
-        url = f"{self.base_url}/login/"
+        url = "https://sdxapi.atlanticwave-sdx.ai/login/"
         response = self._make_request("POST", url, self._get_headers(), payload, "ownership login")
 
         if isinstance(response, dict):
             status_code = response.get("status_code", 500)
             self.ownership = ownership if status_code == 200 else None
-            return status_code
+            return response
         
         self.ownership = None
         return 500  # Unexpected response structure
