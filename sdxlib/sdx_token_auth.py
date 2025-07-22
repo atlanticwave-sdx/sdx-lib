@@ -31,6 +31,8 @@ class TokenAuthentication:
         self.token_payload = None
         self.token_sub = None
         self.token_eppn = None
+        self.token_given_name = None
+        self.token_family_name = None
         self.token_kid = None
         self.token_decoded = None
         self.token_iss = None
@@ -70,6 +72,8 @@ class TokenAuthentication:
 
             self.token_sub = self.token_decoded.get("sub", None)  # unique identifier for the use
             self.token_eppn = self.token_decoded.get("eppn", None)  # Eduperson Persistent Identifier
+            self.token_given_name = self.token_decoded.get("given_name", None)  # First Name
+            self.token_family_name = self.token_decoded.get("family_name", None)  # Last Name
             self.token_iss = self.token_decoded.get("iss", None)  # Issuer
             self.token_aud = self.token_decoded.get("aud", None)  # Audience
 
