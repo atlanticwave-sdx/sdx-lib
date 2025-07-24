@@ -18,20 +18,127 @@ class SDXClient:
     def __init__(
         self,
         base_url: str,
+        source: str = "fabric",
         logger: Optional[logging.Logger] = None,
-    ) -> None:
-        """Initialize SDXClient instance."""
+        ) -> None:
+        """Initialize SDXClient instance and authenticate ownership."""
         self.base_url = SDXValidator.validate_non_empty_string(base_url, "Base URL")
-        self.fabric_token = TokenAuthentication().load_token().fabric_token
-        self.ownership = None # Enforced to be set later via ownership_login
+        self._logger = logger or logging.getLogger(__name__)
+        self._request_cache = {}
+
+        # Load token once and reuse
+        self.token_auth = TokenAuthentication().load_token()
+
+        self.source = source # validate source
+        self.user_id = None # Enforced to be set later via create_user_session
+        self.ownership = None # Enforced to be set later via create_user_session
+        self.email = None # Enforced to be set later via create_user_session
+
         self.name = None
         self.endpoints = None
         self.description = None
         self.notifications = None
         self.scheduling = None
         self.qos_metrics = None
-        self._logger = logger or logging.getLogger(__name__)
-        self._request_cache = {}
+
+        # Automatically authenticate user on instantiation
+        self.create_user_session(source)
+
+    def create_user_session(self, source: str = "fabric") -> None:
+        """
+        Authenticate the user and initialize ownership.
+        Raises SDXException if authentication fails.
+        """
+        try:
+            sub = self.token_auth.token_sub
+            ownership = SDXValidator.validate_ownership(sub)
+            email = self.token_auth.token_decoded.get("email")
+            eppn = self.token_auth.token_eppn
+            given_name = self.token_auth.token_given_name
+            family_name = self.token_auth.token_family_name
+        except Exception as e:
+            raise SDXException(
+                status_code=401,
+                message="Token or ownership derivation failed",
+                error_details=str(e)
+            )
+
+        payload = {
+            "source": source,
+            "ownership": ownership,
+            "email": email or "",
+            "eppn": eppn or "",
+            "first_name": given_name or "",
+            "last_name": family_name or "",
+            "role": "researcher"
+            }
+
+        url = "https://sdxapi.atlanticwave-sdx.ai/login/"
+        response, status_code = self._make_request(
+            "POST", url, self._get_headers(), payload, "session login"
+            )
+
+        if not isinstance(response, dict):
+            raise SDXException(
+                status_code=500,
+                message="Invalid response format during session login",
+                error_details=str(response)
+            )
+
+        if status_code != 200:
+            self.ownership = None
+            raise SDXException(
+                status_code=status_code,
+                message="Session login failed",
+                error_details=response
+            )
+
+        # Assign only on success
+        self.user_id = response.get("user_id", None)
+        self.ownership = response.get("ownership", ownership)
+        self.email = response.get("email", payload["email"])
+        self.source = source
+
+    def services(self, method="GET", service_id=None):
+        """
+        Interact with the /services endpoint on the SDX API.
+
+        Args:
+        method (str): HTTP method to use ('GET', 'POST', 'DELETE').
+        service_id (str, optional): Required for POST and DELETE.
+
+        Returns:
+        tuple: (status_code, response_dict, error_message)
+        """
+        # Ensure session was created and required identity fields are present
+        if not all([self.user_id, self.ownership, self.source]):
+            return 400, None, "Missing user_id, ownership, or source. Run create_user_session() first."
+
+        url = "https://sdxapi.atlanticwave-sdx.ai/services/"
+        payload = {
+            "user_id": self.user_id,
+            "ownership": self.ownership,
+            "email": self.email,
+            "source": self.source,
+        }
+
+        # service_id is mandatory for POST and DELETE
+        if method.upper() in ("POST", "DELETE"):
+            if not service_id:
+                return 400, None, "Missing 'service_id' for POST or DELETE request."
+            payload["service_id"] = service_id
+
+        try:
+            response = self._make_request(method.upper(), url, self._get_headers(), payload, f"{method} /services")
+
+            if isinstance(response, dict):
+                status_code = response.get("status_code", 200 if method == "GET" else 201)
+                return status_code, response, None
+
+            return status_code or 500, None, f"Unexpected response from /services: {response}"
+
+        except Exception as e:
+            return 500, None, f"Service {method.upper()} request failed: {e}"
 
     def create_l2vpn(self, name: str, endpoints: List[Dict[str, str]]) -> dict:
         """Creates an L2VPN."""
@@ -362,9 +469,8 @@ class SDXClient:
         """Returns headers for API requests."""
         return {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.fabric_token}",
+            "Authorization": f"Bearer {self.token_auth.fabric_token}",
         }
-
     def _make_request(
         self,
         method: str,
@@ -373,12 +479,8 @@ class SDXClient:
         payload: Optional[dict] = None,
         operation: str = "",
         cache_key: Optional[tuple] = None
-    ) -> dict:
-        """
-        Handles API requests with error handling and logging.
-        Skips ownership validation if operation is 'ownership login'.
-        """
-        if operation != "ownership login" and not self.ownership:
+        ) -> tuple[dict, int]:
+        if operation != "session login" and not self.ownership:
             raise SDXException(
                 status_code=400,
                 message="Missing ownership",
@@ -387,63 +489,32 @@ class SDXClient:
 
         try:
             response = requests.request(
-                method, url, json=payload, headers=headers, timeout=120)
+                method, url, json=payload, headers=headers, timeout=120
+            )
             response.raise_for_status()
+
             response_json = response.json()
-            
+
             if cache_key:
                 self._request_cache[cache_key] = (payload, response_json)
-                
-            return response_json
-            
+
+            return response_json, response.status_code
+
         except HTTPError as e:
-            # Pass self._logger explicitly
-            return SDXValidator.handle_http_error(self._logger, e, operation)
+            handled = SDXValidator.handle_http_error(self._logger, e, operation)
+            return handled, e.response.status_code if e.response else 500
+
         except Timeout:
-            return {"status_code": 408,
-                    "error_message": "Request Timeout",
-                    "error_details": "The request timed out."
-                   }
+            return {
+                "status_code": 408,
+                "error_message": "Request Timeout",
+                "error_details": "The request timed out."
+            }, 408
+
         except RequestException as e:
-            return {"status_code": 500,
-                    "error_message": "Request Error",
-                    "error_details": str(e)
-                   }
+            return {
+                "status_code": 500,
+                "error_message": "Request Error",
+                "error_details": str(e)
+            }, 500
 
-    def login(self, source: str = "fabric") -> dict:
-        """
-        Accesses SDX API login endpoint and validates ownership.
-        Returns:
-        int: HTTP status code from login endpoint or database validation.
-        """
-        try:
-            token_auth = TokenAuthentication().load_token()
-            sub = token_auth.token_sub
-            self.ownership = SDXValidator.validate_ownership(sub)
-            email = token_auth.token_decoded.get("email")
-            eppn = token_auth.token_eppn
-            given_name = token_auth.token_given_name
-            family_name = token_auth.token_family_name
-        except Exception as e:
-            return 401, None, f"Token or ownership derivation failed: {e}"
-
-        payload = {
-                "source": source,
-                "ownership": self.ownership,
-                "email": email or "",
-                "eppn": eppn or "",
-                "first_name": given_name or "",
-                "last_name": family_name or "",
-                "role": "researcher"
-                }
-
-        url = "https://sdxapi.atlanticwave-sdx.ai/login/"
-        response = self._make_request("POST", url, self._get_headers(), payload, "ownership login")
-
-        if isinstance(response, dict):
-            status_code = response.get("status_code", 500)
-            self.ownership = ownership if status_code == 200 else None
-            return response
-        
-        self.ownership = None
-        return 500  # Unexpected response structure
