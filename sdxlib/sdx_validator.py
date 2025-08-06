@@ -1,84 +1,90 @@
+# sdx_validator.py
+
 import logging
 import re
 import hashlib
 import base64
 from typing import Optional, List, Dict, Union
-from requests.exceptions import RequestException, HTTPError, Timeout
+from requests.exceptions import HTTPError
 from sdxlib.sdx_token_auth import TokenAuthentication
-
 from sdxlib.sdx_exception import SDXException
 
+
 class SDXValidator:
-    """ Validation utilities for SDXClient."""
-    
+    """Validation utilities for SDXClient."""
+
     PORT_ID_PATTERN = r"^urn:sdx:port:[a-zA-Z0-9.,-_\/]+:[a-zA-Z0-9.,-_\/]+:[a-zA-Z0-9.,-_\/]+$"
-    
+
+    @staticmethod
+    def validate_required_url_env(url_env: str) -> str:
+        """
+        Validates the environment string and returns the correct SDX API base URL.
+        Args:
+        url_env (str): Must include 'test' or 'prod' (case-insensitive).
+        Returns:
+        str: Full base URL for the SDX API.
+        Raises:
+        ValueError: If input is invalid or does not match expected environments.
+        """
+        if not isinstance(url_env, str) or not url_env.strip():
+            raise ValueError("Environment must be a non-empty string.")
+        env = url_env.strip().lower()
+        if "test" in env:
+            return "https://sdxapi.atlanticwave-sdx.ai/test"
+        elif "prod" in env:
+            return "https://sdxapi.atlanticwave-sdx.ai/production"
+        else:
+            raise ValueError("Environment must include either 'test' or 'prod'.")
+
     @staticmethod
     def validate_required_attributes(base_url: str, name: Optional[str], endpoints: Optional[List[Dict[str, str]]]) -> None:
-        """ Validates required attributes before making an API request."""
         if not base_url or not name or not endpoints:
             raise ValueError("Base URL, name, and endpoints are required.")
-    
+
     @staticmethod
     def validate_non_empty_string(value: str, field_name: str) -> str:
-        """ Validates that a string is non-empty."""
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{field_name} must be a non-empty string.")
         return value
 
     @staticmethod
     def validate_name(name: Optional[str]) -> Optional[str]:
-        """ Validates the name attribute."""
         if name and (not isinstance(name, str) or len(name) > 50):
             raise ValueError("Name must be a non-empty string with max 50 characters.")
         return name
 
     @staticmethod
     def validate_ownership(ownership: Optional[str]) -> Optional[str]:
-        """ Validates the ownership attribute."""
         if ownership is None:
             ownership = TokenAuthentication().load_token().token_sub
 
-        if not isinstance(
-                ownership, str) or not ownership.startswith(
-                        "http://cilogon.org/"):
-            raise ValueError(
-                    "Invalid sub claim. Must be a CILogon-issued sub string.")
+        if not isinstance(ownership, str) or not ownership.startswith("http://cilogon.org/"):
+            raise ValueError("Invalid sub claim. Must be a CILogon-issued sub string.")
 
-        # Hash the entire sub claim
         sha256_hash = hashlib.sha256(ownership.encode("utf-8")).digest()
         b64_encoded = base64.urlsafe_b64encode(sha256_hash).decode("utf-8")
-
-        # Return the first 16 characters of the encoded string (AW-SDX spec)
         return b64_encoded[:16]
 
     @staticmethod
     def verify_ownership(ownership: str, stored_hash: str) -> bool:
-        """Recomputes the hash from ownership and checks if it matches the stored hash."""
-        return validate_ownership(ownership) == stored_hash
+        return SDXValidator.validate_ownership(ownership) == stored_hash
 
     @staticmethod
     def validate_description(description: Optional[str]) -> Optional[str]:
-        """ Validates the description attribute."""
         if description and len(description) > 255:
             raise ValueError("Description must be less than 256 characters.")
         return description
 
     @staticmethod
     def is_valid_email(email: str) -> bool:
-        """Validates an email address format."""
         if isinstance(email, str):
             return re.match(r"^\S+@\S+$", email)
-        return None
+        return False
 
     @staticmethod
-    def validate_notifications(
-            notifications: Optional[List[Dict[str, str]]]) -> Optional[List[Dict[str, str]]]:
-        """ Validates the notifications attribute."""
+    def validate_notifications(notifications: Optional[List[Dict[str, str]]]) -> Optional[List[Dict[str, str]]]:
         if notifications is None:
-            notifications = [
-                    {"email": TokenAuthentication().load_token().token_eppn}
-                    ]
+            notifications = [{"email": TokenAuthentication().load_token().token_eppn}]
 
         if not isinstance(notifications, list):
             raise ValueError("Notifications must be provided as a list.")
@@ -97,21 +103,12 @@ class SDXValidator:
 
     @staticmethod
     def _validate_vlan_range(vlan_range: str) -> Dict[str, str]:
-        """Validates VLAN range format.
-        Args:
-        vlan_range (str): VLAN range in format 'ID1:ID2'.
-        Returns:
-        Dict[str, str]: Validated VLAN range.
-        Raises:
-        ValueError: If the VLAN range is not valid.
-        """
         try:
             vlan_id1, vlan_id2 = map(int, vlan_range.split(":"))
             if 1 <= vlan_id1 < vlan_id2 <= 4095:
                 return {"vlan": vlan_range}
         except ValueError:
             pass
-
         raise ValueError(
             f"Invalid VLAN range format: '{vlan_range}'. Must be 'VLAN ID1:VLAN ID2' "
             "with values between 1 and 4095, where ID1 < ID2."
@@ -119,15 +116,6 @@ class SDXValidator:
 
     @staticmethod
     def validate_endpoint_dict(endpoint_dict: Dict[str, str]) -> Dict[str, str]:
-        """ Validates a single endpoint dictionary.
-        Args:
-        endpoint_dict (Dict[str, str]): Endpoint dictionary.
-        Returns:
-        Dict[str, str]: Validated endpoint dictionary.
-        Raises:
-        TypeError: If endpoint_dict is not a dictionary.
-        ValueError: If endpoint_dict does not contain required keys or VLAN is invalid.
-        """
         if not isinstance(endpoint_dict, dict):
             raise TypeError("Endpoint must be a dictionary.")
 
@@ -142,9 +130,8 @@ class SDXValidator:
         if not vlan_value or not isinstance(vlan_value, str):
             raise ValueError("Each endpoint must contain a valid 'vlan' key.")
 
-        # Validate VLAN values
         if vlan_value in {"any", "all", "untagged"}:
-            return endpoint_dict  # Valid special VLAN
+            return endpoint_dict
 
         if vlan_value.isdigit():
             if 1 <= int(vlan_value) <= 4095:
@@ -161,16 +148,6 @@ class SDXValidator:
 
     @staticmethod
     def validate_endpoints(endpoints: Optional[List[Dict[str, str]]]) -> List[Dict[str, str]]:
-        """ Validates a list of endpoints.
-        Args:
-        endpoints (Optional[List[Dict[str, str]]]): List of endpoint dictionaries.
-        Returns:
-        List[Dict[str, str]]: Validated list of endpoint dictionaries.
-        Raises:
-        TypeError: If endpoints is not a list.
-        ValueError: If endpoints list is empty, has fewer than 2 entries,
-                    or contains inconsistent VLAN configurations.
-        """
         if not endpoints:
             return []
 
@@ -187,10 +164,8 @@ class SDXValidator:
         has_vlan_range = any(":" in vlan for vlan in vlan_values)
         has_single_vlan = any(vlan.isdigit() for vlan in vlan_values)
 
-        # Ensure VLAN consistency across endpoints
         if has_vlan_range and (len(vlan_values) > 1 or has_special_vlan or has_single_vlan):
             raise ValueError("All endpoints must have the same VLAN value if one uses a range.")
-
         if has_special_vlan and (len(vlan_values) > 1 or has_vlan_range or has_single_vlan):
             raise ValueError("All endpoints must have the same VLAN value if one uses 'any', 'all', or 'untagged'.")
 
@@ -198,23 +173,19 @@ class SDXValidator:
 
     @staticmethod
     def is_valid_iso8601(timestamp: str) -> bool:
-        """Checks if the provided string is a valid ISO8601 formatted timestamp."""
-        timestamp_pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
-        return re.match(timestamp_pattern, timestamp) is not None
+        return re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", timestamp) is not None
 
     @staticmethod
     def validate_scheduling(scheduling: Optional[Dict[str, str]]) -> Optional[Dict[str, str]]:
-        """Validates scheduling dictionary."""
         if scheduling is None:
             return None
         if not isinstance(scheduling, dict):
             raise TypeError("Scheduling must be a dictionary.")
-        
+
         valid_keys = {"start_time", "end_time"}
         for key in scheduling:
             if key not in valid_keys:
                 raise ValueError(f"Invalid scheduling key: {key}")
-
             time = scheduling[key]
             if not isinstance(time, str):
                 raise TypeError(f"{key} must be a string.")
@@ -224,12 +195,11 @@ class SDXValidator:
         if "start_time" in scheduling and "end_time" in scheduling:
             if scheduling["end_time"] <= scheduling["start_time"]:
                 raise ValueError("End time must be after start time.")
-        
+
         return scheduling
-        
+
     @staticmethod
     def validate_qos_metric_value(key: str, value_dict: Dict[str, Union[int, bool]]) -> None:
-        """Validates QoS metric values."""
         if "value" not in value_dict or not isinstance(value_dict["value"], int):
             raise ValueError(f"QoS value for '{key}' must be an integer.")
         if "strict" in value_dict and not isinstance(value_dict["strict"], bool):
@@ -239,15 +209,14 @@ class SDXValidator:
         min_val, max_val = valid_ranges[key]
         if not (min_val <= value_dict["value"] <= max_val):
             raise ValueError(f"{key} must be between {min_val} and {max_val}.")
-    
+
     @staticmethod
     def validate_qos_metrics(qos_metrics: Optional[Dict[str, Dict[str, Union[int, bool]]]]) -> None:
-        """Validates QoS metrics."""
         if qos_metrics is None:
             return
         if not isinstance(qos_metrics, dict):
             raise TypeError("QoS metrics must be a dictionary.")
-        
+
         valid_keys = {"min_bw", "max_delay", "max_number_oxps"}
         for key, value_dict in qos_metrics.items():
             if key not in valid_keys or not isinstance(value_dict, dict):
@@ -256,14 +225,11 @@ class SDXValidator:
 
     @staticmethod
     def handle_http_error(logger: logging.Logger, e: HTTPError, operation: str) -> None:
-        """Handles HTTP errors by logging and raising an SDXException."""
         logger.error(f"HTTP error occurred during {operation}: {e}")
-
         error_details = None
         status_code = getattr(e.response, "status_code", "Unknown")
-        
+
         try:
-            # Check if response content is JSON before attempting to parse
             if "application/json" in e.response.headers.get("Content-Type", ""):
                 try:
                     error_json = e.response.json()
@@ -271,7 +237,7 @@ class SDXValidator:
                 except ValueError:
                     error_details = "Invalid JSON response"
             else:
-                error_details = e.response.text  # Use raw text if not JSON
+                error_details = e.response.text
         except AttributeError:
             error_details = "Error details unavailable"
 
@@ -296,3 +262,32 @@ class SDXValidator:
             "message": error_message,
             "error_details": error_details
         }
+
+    @staticmethod
+    def has_permission(
+        logger: logging.Logger,
+        user_id: Optional[str],
+        ownership: Optional[str],
+        services_func,
+        service_id: Optional[str] = None
+    ) -> bool:
+        """
+        Checks whether the user has permission to operate on the given service.
+        """
+        if not user_id or not ownership:
+            logger.warning("[has_permission] Session is incomplete.")
+            return False
+
+        status_code, response, error = services_func(method="GET")
+
+        if status_code != 200 or not isinstance(response, dict):
+            logger.warning(f"[has_permission] Failed to fetch services: {error}")
+            return False
+
+        service_ids = response.get("services", [])
+        if service_id and service_id not in service_ids:
+            logger.warning(f"[has_permission] Unauthorized service_id: {service_id}")
+            return False
+
+        return True
+
