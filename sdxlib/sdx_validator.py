@@ -16,23 +16,22 @@ class SDXValidator:
     PORT_ID_PATTERN = r"^urn:sdx:port:[a-zA-Z0-9.,-_\/]+:[a-zA-Z0-9.,-_\/]+:[a-zA-Z0-9.,-_\/]+$"
 
     @staticmethod
-    def validate_required_url_env(url_env: str) -> str:
+    def validate_required_url(BASE_URL: str, url_env: str) -> str:
         """
-        Validates the environment string and returns the correct SDX API base URL.
+        Validates the environment string and returns the correct SDX API URL.
         Args:
+        BASE_URL: constant defined with base url
         url_env (str): Must include 'test' or 'prod' (case-insensitive).
         Returns:
-        str: Full base URL for the SDX API.
+        str: Full URL for the SDX API.
         Raises:
         ValueError: If input is invalid or does not match expected environments.
         """
         if not isinstance(url_env, str) or not url_env.strip():
             raise ValueError("Environment must be a non-empty string.")
         env = url_env.strip().lower()
-        if "test" in env:
-            return "https://sdxapi.atlanticwave-sdx.ai/test"
-        elif "prod" in env:
-            return "https://sdxapi.atlanticwave-sdx.ai/production"
+        if "test" in env or "prod" in env:
+            return f"{BASE_URL}{url_env}"
         else:
             raise ValueError("Environment must include either 'test' or 'prod'.")
 
