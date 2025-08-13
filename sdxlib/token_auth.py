@@ -4,7 +4,7 @@ import jwt  # PyJWT library for decoding JWT tokens
 import requests
 
 
-class TokenAuthentication:
+class FabricTokenAuthentication:
     """
     A class to handle token-based authentication using Fabric Credential Manager
     for secure communication with SDX Controller.
@@ -12,7 +12,7 @@ class TokenAuthentication:
 
     def __init__(self):
         """
-        Initializes the TokenAuthentication class with optional token path, endpoint, and slice name.
+        Initializes the FabricTokenAuthentication class with optional token path.
         If no path is provided, uses the environment variable FABRIC_TOKEN_LOCATION
         or defaults to /home/fabric/.tokens.json.
 
@@ -22,8 +22,6 @@ class TokenAuthentication:
             is a claim or attribute often included in authentication tokens,
             particularly in the context of Federated Identity systems, 
             such as those used in higher education and research institutions.
-            endpoint (str, optional): The API endpoint to validate the token against. Defaults to 'sax.net/sdx/topology'.
-            slice_name (str, optional): The name of the slice to initialize. Defaults to "Slice-AWSDX".
         """
         self.token_path = "/home/fabric/.tokens.json"
         self.fabric_token = None

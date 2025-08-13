@@ -1,9 +1,9 @@
 # sdx_user_session.py
 
-from sdxlib.sdx_token_auth import TokenAuthentication
-from sdxlib.sdx_validator import SDXValidator
-from sdxlib.sdx_exception import SDXException
-from sdxlib.sdx_request import _make_request, _get_headers
+from sdxlib.token_auth import FabricTokenAuthentication as TokenAuth
+from sdxlib.validator import SDXValidator
+from sdxlib.exception import SDXException
+from sdxlib.request import _make_request
 
 
 def create_user_session(client, base_url: str, source: str = "fabric") -> dict:
@@ -14,7 +14,7 @@ def create_user_session(client, base_url: str, source: str = "fabric") -> dict:
         dict with keys: user_id, ownership, email
     """
     try:
-        token = client.token_auth or TokenAuthentication().load_token()
+        token = client.token_auth or TokenAuth().load_token()
         sub = token.token_sub
         ownership = SDXValidator.validate_ownership(sub)
         email = token.token_decoded.get("email")

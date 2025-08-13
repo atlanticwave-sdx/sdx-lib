@@ -3,14 +3,14 @@
 import logging
 import pandas as pd
 from typing import Optional, List, Dict, Union, Any
-from config import BASE_URL
 
-from sdxlib.sdx_token_auth import TokenAuthentication
-from sdxlib.sdx_exception import SDXException
-from sdxlib.sdx_validator import SDXValidator
-from sdxlib.sdx_request import _make_request, _get_headers, _build_payload
-from sdxlib.sdx_user_session import create_user_session, manage_services
-from sdxlib.sdx_response import SDXResponse
+from sdxlib.config import BASE_URL
+from sdxlib.token_auth import FabricTokenAuthentication as TokenAuth
+from sdxlib.exception import SDXException
+from sdxlib.validator import SDXValidator
+from sdxlib.request import _make_request
+from sdxlib.session import create_user_session, manage_services
+from sdxlib.response import SDXResponse
 
 
 class SDXClient:
@@ -22,7 +22,7 @@ class SDXClient:
         self._logger = logger or logging.getLogger(__name__)
         self._request_cache = {}
 
-        self.token_auth = TokenAuthentication().load_token()
+        self.token_auth = TokenAuth().load_token()
         self.source = source
 
         self.user_id = None
@@ -57,7 +57,18 @@ class SDXClient:
         SDXValidator.validate_required_attributes(self.url, self.name, self.endpoints)
 
         url = f"{self.url}/l2vpn/{self.VERSION}"
-        payload = _build_payload(self)
+        payload = {
+            key: value for key, value in {
+                "name": self.name,
+                "endpoints": self.endpoints,
+                "ownership": self.ownership,
+                "description": self.description,
+                "notifications": self.notifications,
+                "scheduling": self.scheduling,
+                "qos_metrics": self.qos_metrics,
+            }.items() if value is not None  # Exclude None values
+        }   
+
         cache_key = (self.name, tuple(endpoint.get("port_id", "") for endpoint in self.endpoints))
 
         if cache_key in self._request_cache:

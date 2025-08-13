@@ -4,11 +4,11 @@ import requests
 from requests.exceptions import RequestException, HTTPError, Timeout
 from typing import Optional, Dict, Any
 
+from sdxlib.token_auth import FabricTokenAuthentication as TokenAuth
 
 def _make_request(
     method: str,
     url: str,
-    headers: Dict[str, str],
     payload: Optional[dict] = None,
     operation: str = "",
     cache_key: Optional[Any] = None,
@@ -18,7 +18,7 @@ def _make_request(
     Returns a tuple: (response dict, status code)
     """
     try:
-        response = requests.request(method, url, json=payload, headers=headers, timeout=120)
+        response = requests.request(method, url, json=payload, headers=_get_headers(), timeout=120)
         response.raise_for_status()
         json_data = response.json()
         return json_data, response.status_code
@@ -31,27 +31,10 @@ def _make_request(
         return {"status_code": 500, "error": str(e)}, 500
 
 
-def _get_headers(client) -> Dict[str, str]:
+def _get_headers() -> Dict[str, str]:
     """Build authorization headers for requests."""
+    token = TokenAuth().load_token()
     return {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {client.token_auth.fabric_token}",
+        "Authorization": f"Bearer {token.fabric_token}",
     }
-
-
-def _build_payload(client) -> dict:
-    """Constructs a request payload from SDXClient instance variables."""
-    return {
-        key: value
-        for key, value in {
-            "name": client.name,
-            "endpoints": client.endpoints,
-            "ownership": client.ownership,
-            "description": client.description,
-            "notifications": client.notifications,
-            "scheduling": client.scheduling,
-            "qos_metrics": client.qos_metrics,
-        }.items()
-        if value is not None
-    }
-

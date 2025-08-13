@@ -6,8 +6,8 @@ import hashlib
 import base64
 from typing import Optional, List, Dict, Union
 from requests.exceptions import HTTPError
-from sdxlib.sdx_token_auth import TokenAuthentication
-from sdxlib.sdx_exception import SDXException
+from sdxlib.token_auth import FabricTokenAuthentication as TokenAuth
+from sdxlib.exception import SDXException
 
 
 class SDXValidator:
@@ -55,7 +55,7 @@ class SDXValidator:
     @staticmethod
     def validate_ownership(ownership: Optional[str]) -> Optional[str]:
         if ownership is None:
-            ownership = TokenAuthentication().load_token().token_sub
+            ownership = TokenAuth().load_token().token_sub
 
         if not isinstance(ownership, str) or not ownership.startswith("http://cilogon.org/"):
             raise ValueError("Invalid sub claim. Must be a CILogon-issued sub string.")
@@ -83,7 +83,7 @@ class SDXValidator:
     @staticmethod
     def validate_notifications(notifications: Optional[List[Dict[str, str]]]) -> Optional[List[Dict[str, str]]]:
         if notifications is None:
-            notifications = [{"email": TokenAuthentication().load_token().token_eppn}]
+            notifications = [{"email": TokenAuth().load_token().token_eppn}]
 
         if not isinstance(notifications, list):
             raise ValueError("Notifications must be provided as a list.")
