@@ -5,7 +5,6 @@ import pandas as pd
 from typing import Optional, List, Dict, Union, Any
 
 from sdxlib.config import BASE_URL
-from sdxlib.token_auth import FabricTokenAuthentication as TokenAuth
 from sdxlib.exception import SDXException
 from sdxlib.validator import SDXValidator
 from sdxlib.request import _make_request

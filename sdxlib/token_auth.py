@@ -2,29 +2,19 @@ import os
 import json
 import jwt  # PyJWT library for decoding JWT tokens
 import requests
+from sdxlib.config import BASE_URL, PROXY_HOSTNAME, PROXY_PORT, FABRIC_TOKEN_PATH
 
-
-class FabricTokenAuthentication:
+class TokenAuth:
     """
-    A class to handle token-based authentication using Fabric Credential Manager
+    A class to handle token-based authentication
     for secure communication with SDX Controller.
     """
 
     def __init__(self):
         """
-        Initializes the FabricTokenAuthentication class with optional token path.
-        If no path is provided, uses the environment variable FABRIC_TOKEN_LOCATION
-        or defaults to /home/fabric/.tokens.json.
-
-        Args:
-            token_path (str, optional): Path to the token file. Defaults to None.
-            eppn (str, optional): The eppn (Education Person Persistent Identifier) 
-            is a claim or attribute often included in authentication tokens,
-            particularly in the context of Federated Identity systems, 
-            such as those used in higher education and research institutions.
+        Initializes the Token class
         """
-        self.token_path = "/home/fabric/.tokens.json"
-        self.fabric_token = None
+        self.token = None
         self.token_header = None
         self.token_payload = None
         self.token_sub = None
@@ -35,11 +25,45 @@ class FabricTokenAuthentication:
         self.token_decoded = None
         self.token_iss = None
         self.token_aud = None
-        self.proxy_hostname = "sdxapi.atlanticwave-sdx.ai"
-        self.proxy_port = "443"
-        self.endpoint = "topology"
 
-    def load_token(self):
+    def _get_fabric_token(self):
+        if not os.path.exists(FABRIC_TOKEN_PATH):
+            print("Error: Token file not found!")
+            raise FileNotFoundError(f"Token file not found at {FABRIC_TOKEN_PATH}")
+        try:
+            # Read the token JSON file
+            with open(FABRIC_TOKEN_PATH, "r") as f:
+                token_data = json.load(f)
+
+            fabric_token = token_data.get("id_token", None)
+            if fabric_token:
+                self.token = fabric_token
+                # Decode JWT header (to get 'kid')
+                self.token_header = jwt.get_unverified_header(fabric_token)
+                self.token_kid = self.token_header.get("kid", None)
+
+                # Decode JWT token without verifying the signature (useful for debugging)
+                self.token_decoded = jwt.decode(fabric_token, options={"verify_signature": False})
+
+                self.token_sub = self.token_decoded.get("sub", None)  # unique identifier for the use
+                self.token_eppn = self.token_decoded.get("eppn", None)  # Eduperson Persistent Identifier
+                self.token_given_name = self.token_decoded.get("given_name", None)  # First Name
+                self.token_family_name = self.token_decoded.get("family_name", None)  # Last Name
+                self.token_iss = self.token_decoded.get("iss", None)  # Issuer
+                self.token_aud = self.token_decoded.get("aud", None)  # Audience
+
+                return self
+            else:
+                print("Error: Token is missing!")
+
+        except json.JSONDecodeError:
+            print("Error: Failed to decode fabric token JSON file!")
+        except jwt.DecodeError:
+            print("Error: Failed to decode fabric JWT token!")
+        except Exception as e:
+            print(f"Fabric Token Unexpected Error: {e}")
+
+    def load_token(self, source = "fabric"):
         """
         Load and decode the JWT token from the token file.
         
@@ -47,42 +71,8 @@ class FabricTokenAuthentication:
         such as the 'kid', 'iss', and 'aud'. Handles errors related to missing 
         token files or invalid token formats.
         """
-        if not os.path.exists(self.token_path):
-            print("Error: Token file not found!")
-
-        # print("FABRIC Token Path:", self.token_path)
-
-        try:
-            # Read the token JSON file
-            with open(self.token_path, "r") as f:
-                token_data = json.load(f)
-
-            self.fabric_token = token_data.get("id_token", None)
-            if not self.fabric_token:
-                print("Error: Token is missing!")
-
-            # Decode JWT header (to get 'kid')
-            self.token_header = jwt.get_unverified_header(self.fabric_token)
-            self.token_kid = self.token_header.get("kid", None)
-
-            # Decode JWT token without verifying the signature (useful for debugging)
-            self.token_decoded = jwt.decode(self.fabric_token, options={"verify_signature": False})
-
-            self.token_sub = self.token_decoded.get("sub", None)  # unique identifier for the use
-            self.token_eppn = self.token_decoded.get("eppn", None)  # Eduperson Persistent Identifier
-            self.token_given_name = self.token_decoded.get("given_name", None)  # First Name
-            self.token_family_name = self.token_decoded.get("family_name", None)  # Last Name
-            self.token_iss = self.token_decoded.get("iss", None)  # Issuer
-            self.token_aud = self.token_decoded.get("aud", None)  # Audience
-
-            return self
-
-        except json.JSONDecodeError:
-            print("Error: Failed to decode token JSON file!")
-        except jwt.DecodeError:
-            print("Error: Failed to decode JWT token!")
-        except Exception as e:
-            print(f"Unexpected Error: {e}")
+        if source == "fabric":
+            return self._get_fabric_token()
 
     def validate_token(self):
         """
@@ -91,15 +81,15 @@ class FabricTokenAuthentication:
         Sends a GET request to the specified endpoint to verify if the token is valid.
         Logs the response status and checks for an empty response before parsing the JSON.
         """
-        if not self.proxy_hostname or not self.proxy_port:
+        if not PROXY_HOSTNAME or not PROXY_PORT:
             print("Error: Proxy hostname and port are not set!")
 
         # Construct the URL using proxy_hostname and proxy_port
-        URL = f"https://{self.proxy_hostname}:{self.proxy_port}/api/"
+        URL = f"https://{PROXY_HOSTNAME}:{PROXY_PORT}/api/"
 
         headers = {
             "Content-Type": "application/json",  # Ensure JSON format
-            "Authorization": f"Bearer {self.fabric_token}"  # Use the decoded token
+            "Authorization": f"Bearer {self.token}"  # Use the decoded token
         }
 
         try:
