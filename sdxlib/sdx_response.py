@@ -93,14 +93,14 @@ class SDXResponse:
             response_json, "description", str
         )
         self.notifications: Optional[List[Dict[str, str]]] = self._validate_optional(
-            response_json, "notifications", list
+            response_json, "notifications", list, default=[]
         )
         self.scheduling: Optional[Dict[str, str]] = self._validate_optional(
-            response_json, "scheduling", dict
+            response_json, "scheduling", dict, default={}
         )
         self.qos_metrics: Optional[
             Dict[str, Dict[str, Union[int, bool]]]
-        ] = self._validate_optional(response_json, "qos_metrics", dict)
+        ] = self._validate_optional(response_json, "qos_metrics", dict, default={})
 
         # Log successful validation
         self._logger.debug("SDXResponse successfully initialized.")
@@ -138,9 +138,9 @@ class SDXResponse:
 
         return value
 
-    def _validate_optional(self, data: dict, key: str, expected_type: type):
+    def _validate_optional(self, data: dict, key: str, expected_type: type, default=None):
         """Validates optional fields and ensures correct type if present."""
-        value = data.get(key)
+        value = data.get(key, default)
 
         if value is not None and not isinstance(value, expected_type):
             self._logger.warning(
