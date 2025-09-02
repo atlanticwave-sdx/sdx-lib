@@ -4,8 +4,6 @@ import requests
 from requests.exceptions import RequestException, HTTPError, Timeout
 from typing import Tuple, Optional, Dict, Any
 
-from sdxlib.token_auth import TokenAuth
-
 JSON_SAMPLE_CHARS = 600  # how many chars of a non-JSON/HTML body to include on errors
 
 def _make_request(
@@ -25,7 +23,7 @@ def _make_request(
     - On success (2xx with JSON): returns parsed JSON dict (or list wrapped under {"data": ...})
     - On non-JSON or non-2xx: returns a structured error payload with helpful diagnostics
     """
-    headers = _get_headers(source)
+    headers = _get_headers()
     if "error" in headers:
         # Token missing/unavailable
         return {
@@ -121,20 +119,12 @@ def _make_request(
     }, status
 
 
-def _get_headers(source: str = "fabric") -> Dict[str, str]:
+def _get_headers() -> Dict[str, str]:
     """
     Build authorization and default headers.
-    Returns headers OR {"error": "..."} if token is missing/unavailable.
+    Returns headers.
     """
-    try:
-        token = TokenAuth().load_token(source)
-        if not token:
-            return {"error": "Missing token (token not found)."}
-    except Exception as e:
-        return {"error": f"Could not load token: {e}"}
-
     return {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "Authorization": f"Bearer {token}",
     }

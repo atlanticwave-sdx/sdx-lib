@@ -18,8 +18,8 @@ def get_topology(url_env: str = "test", source: str = "fabric") -> dict:
     On error: {"response": <payload>, "status_code": <code>}
     On success: raw topology dict.
     """
-    base_url = SDXValidator.validate_required_url(BASE_URL, url_env)
-    url = f"{base_url}/topology"
+    # base_url = SDXValidator.validate_required_url(BASE_URL, url_env)
+    url = f"{BASE_URL}/topology"
 
     response, status_code = _make_request(
             "GET", 
@@ -46,7 +46,8 @@ def get_all_l2vpns(
     - format="json": list[dict] friendly for UI/logging
     - format="dataframe": pandas.DataFrame from friendly list
     """
-    base_url = SDXValidator.validate_required_url(BASE_URL, url_env)
+    # base_url = SDXValidator.validate_required_url(BASE_URL, url_env)
+    base_url = BASE_URL
     url = f"{base_url}/l2vpn/{VERSION}/archived" if archived else f"{base_url}/l2vpn/{VERSION}"
 
     response, status = _make_request(
@@ -147,25 +148,53 @@ def _parse_vlan_value(v: Any) -> List[int]:
                 print(f"Invalid VLAN value: {part}")
     return out
 
-
 def _get_vlan_range(port: Dict[str, Any], vlans_in_use: Dict[str, List[int]]) -> str:
-    """Compute available VLAN ranges on a port (excluding vlans_in_use)."""
+    """Compute available VLAN ranges on a port (excluding vlans_in_use).
+       Accept both services keys 'l2vpn-ptp' and 'l2vpn_ptp', and vlan_range items as
+       ['1-4094'] or [[1, 4094]].
+    """
     try:
         port_id = port.get("id", "Unknown")
         services = port.get("services", {}) or {}
-        vlan_data = services.get("l2vpn-ptp", {}).get("vlan_range", [])
+        # accept both hyphen and underscore
+        l2ptp = services.get("l2vpn-ptp") or services.get("l2vpn_ptp") or {}
+        vlan_data = l2ptp.get("vlan_range", []) or []
+
+        # normalize to list of [start, end] pairs of ints
+        vlan_pairs: List[List[int]] = []
+        for item in vlan_data:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                try:
+                    start, end = int(item[0]), int(item[1])
+                    vlan_pairs.append([start, end])
+                except Exception:
+                    continue
+            elif isinstance(item, str):
+                # allow "1-4094" or "1:4094"
+                if "-" in item or ":" in item:
+                    sep = "-" if "-" in item else ":"
+                    try:
+                        start, end = map(int, item.split(sep))
+                        vlan_pairs.append([start, end])
+                    except Exception:
+                        continue
+
         in_use = set(vlans_in_use.get(port_id, []))
 
-        if not (vlan_data and all(isinstance(v, list) and len(v) == 2 for v in vlan_data)):
+        if not vlan_pairs:
             return "None"
 
-        available = sorted(
-            set(v for start, end in vlan_data for v in range(int(start), int(end) + 1)) - in_use
-        )
+        # expand all ranges then subtract in_use
+        all_allowed = set()
+        for start, end in vlan_pairs:
+            if start <= end:
+                all_allowed.update(range(start, end + 1))
+
+        available = sorted(all_allowed - in_use)
         if not available:
             return "None"
 
-        # Collapse into "a-b, c, d-e"
+        # collapse into "a-b, c, d-e"
         ranges: List[str] = []
         start = end = available[0]
         for vlan in available[1:]:
@@ -180,7 +209,6 @@ def _get_vlan_range(port: Dict[str, Any], vlans_in_use: Dict[str, List[int]]) ->
     except Exception as e:
         print(f"Error extracting VLAN range from port {port.get('id', 'Unknown')}: {e}")
         return "None"
-
 
 def _format_port(port: Dict[str, Any], vlan_usage: Dict[str, List[int]]) -> Dict[str, str]:
     """Formats a port row for output."""
@@ -237,6 +265,7 @@ def get_available_ports(
         source = "fabric",
         search: Optional[str] = None,
         format = "dataframe",  # "dataframe" | "json" | "print"
+        include_down: bool = False,
     ) -> Union[pd.DataFrame, List[dict], None]:
     """
     Lists all customer-facing ports (status=up and not NNI) with VLAN availability.
@@ -257,7 +286,7 @@ def get_available_ports(
     for node in (topology.get("nodes", []) or []):
         for port in (node.get("ports", []) or []):
             try:
-                if port.get("status") == "up" and not port.get("nni"):
+                if i(port.get("status") == "up" or include_down) and not port.get("nni"):
                     available_ports.append(_format_port(port, used_vlans))
             except Exception:
                 continue

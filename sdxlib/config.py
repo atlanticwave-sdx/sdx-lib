@@ -1,7 +1,5 @@
 # config.py
-BASE_URL = "https://sdxapi.atlanticwave-sdx.ai/"
-BASE_URL = "https://sdxapi.atlanticwave-sdx.ai/"
-PROXY_HOSTNAME = "https://sdxapi.atlanticwave-sdx.ai/"
-PROXY_PORT = 443
-FABRIC_TOKEN_PATH = "/home/fabric/.tokens.json"
+BASE_URL = "http://aw-sdx-controller.renci.org:8081/SDX-Controller/"
+PROXY_HOSTNAME = "http://aw-sdx-controller.renci.org:8081/SDX-Controller"
+PROXY_PORT = 80
 VERSION = "1.0"

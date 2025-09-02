@@ -1,6 +1,5 @@
 # sdx_user_session.py
 
-from sdxlib.token_auth import TokenAuth
 from sdxlib.validator import SDXValidator
 from sdxlib.exception import SDXException
 from sdxlib.request import _make_request

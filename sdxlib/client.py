@@ -21,7 +21,6 @@ class SDXClient:
         self._logger = logger or logging.getLogger(__name__)
         self._request_cache = {}
 
-        self.token_auth = TokenAuth().load_token()
         self.source = source
 
         self.user_id = None
