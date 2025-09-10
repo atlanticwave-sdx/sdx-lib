@@ -1,4 +1,11 @@
 # sdx_topology_utils.py
+"""
+Public API (external methods):
+  - get_topology(token: str) -> dict
+  - get_all_l2vpns(token: str, archived: bool = False, format: str = "dataframe", search: str | None = None)
+  - get_available_ports(token: str, search: str | None = None, format: str = "dataframe")
+All other helpers are private (_prefixed).
+"""
 import re
 from collections import defaultdict
 from typing import Dict, List, Optional, Any, Union
@@ -8,36 +15,44 @@ import pandas as pd
 from sdxlib.config import BASE_URL, VERSION
 from sdxlib.exception import SDXException
 from sdxlib.response import SDXResponse
-from sdxlib.validator import SDXValidator
 from sdxlib.request import _make_request
 
-
-def get_topology(url_env: str = "test", source: str = "fabric") -> dict:
+def get_topology(token: str) -> Dict[str, Any]:
     """
-    Retrieves the topology from the SDX Controller.
-    On error: {"response": <payload>, "status_code": <code>}
-    On success: raw topology dict.
+    Fetch topology via NGINX (/production):
+      - GET {BASE_URL}/topology with the Bearer token (validated by Lua)
+      - On success: return the RAW topology dict (if API wraps, unwrap 'data')
+      - On error:   return {"response": <payload>, "status_code": <code>}
     """
-    # base_url = SDXValidator.validate_required_url(BASE_URL, url_env)
-    url = f"{BASE_URL}/topology"
+    if not token:
+        raise ValueError("Bearer token is required for get_topology")
 
-    response, status_code = _make_request(
-            "GET", 
-            url, 
-            source = "fabric", 
-            payload = None, 
-            operation = "get topology")
+    topology_url = f"{BASE_URL}/topology"
+    extra_headers = {"Authorization": f"Bearer {token}"}
+
+    response_body, status_code = _make_request(
+        method="GET",
+        url=topology_url,
+        payload=None,
+        operation="get topology",
+        extra_headers=extra_headers,
+        timeout=60,
+    )
+
     if status_code != 200:
-        return {"response": response, "status_code": status_code}
+        # Pass through structured error from _make_request
+        return {"response": response_body, "status_code": status_code}
 
-    return response or {}
+    # Unwrap if the controller returns a list or wraps under {"data": ...}
+    if isinstance(response_body, dict) and "data" in response_body and isinstance(response_body["data"], (dict, list)):
+        return response_body["data"]
 
+    return response_body or {}
 
 def get_all_l2vpns(
-        url_env = "test",
-        source = "fabric",
+        token: str,
         archived: bool = False,
-        format = "dataframe",   # "raw" | "json" | "dataframe"
+        format: str  = "dataframe",   # "raw" | "json" | "dataframe"
         search: Optional[str] = None
     ) -> Union[pd.DataFrame, Dict[str, SDXResponse], List[dict]]:
     """
@@ -46,16 +61,20 @@ def get_all_l2vpns(
     - format="json": list[dict] friendly for UI/logging
     - format="dataframe": pandas.DataFrame from friendly list
     """
-    # base_url = SDXValidator.validate_required_url(BASE_URL, url_env)
-    base_url = BASE_URL
-    url = f"{base_url}/l2vpn/{VERSION}/archived" if archived else f"{base_url}/l2vpn/{VERSION}"
+    if not token:
+        raise ValueError("Bearer token is required for get_all_l2vpns")
+
+    url = f"{BASE_URL}/l2vpn/{VERSION}/archived" if archived else f"{BASE_URL}/l2vpn/{VERSION}"
+    extra_headers = {"Authorization": f"Bearer {token}"}
 
     response, status = _make_request(
-            "GET", 
-            url, 
-            source = "fabric", 
+            method="GET", 
+            url=url, 
             payload = None, 
-            operation = "retrieve all L2VPNs")
+            operation = "retrieve all L2VPNs",
+            extra_headers=extra_headers,
+            timeout=60,
+        )
     if status != 200 or not isinstance(response, dict):
         # Normalize empties by requested format
         if format == "raw":
@@ -148,53 +167,25 @@ def _parse_vlan_value(v: Any) -> List[int]:
                 print(f"Invalid VLAN value: {part}")
     return out
 
+
 def _get_vlan_range(port: Dict[str, Any], vlans_in_use: Dict[str, List[int]]) -> str:
-    """Compute available VLAN ranges on a port (excluding vlans_in_use).
-       Accept both services keys 'l2vpn-ptp' and 'l2vpn_ptp', and vlan_range items as
-       ['1-4094'] or [[1, 4094]].
-    """
+    """Compute available VLAN ranges on a port (excluding vlans_in_use)."""
     try:
         port_id = port.get("id", "Unknown")
         services = port.get("services", {}) or {}
-        # accept both hyphen and underscore
-        l2ptp = services.get("l2vpn-ptp") or services.get("l2vpn_ptp") or {}
-        vlan_data = l2ptp.get("vlan_range", []) or []
-
-        # normalize to list of [start, end] pairs of ints
-        vlan_pairs: List[List[int]] = []
-        for item in vlan_data:
-            if isinstance(item, (list, tuple)) and len(item) == 2:
-                try:
-                    start, end = int(item[0]), int(item[1])
-                    vlan_pairs.append([start, end])
-                except Exception:
-                    continue
-            elif isinstance(item, str):
-                # allow "1-4094" or "1:4094"
-                if "-" in item or ":" in item:
-                    sep = "-" if "-" in item else ":"
-                    try:
-                        start, end = map(int, item.split(sep))
-                        vlan_pairs.append([start, end])
-                    except Exception:
-                        continue
-
+        vlan_data = services.get("l2vpn-ptp", {}).get("vlan_range", [])
         in_use = set(vlans_in_use.get(port_id, []))
 
-        if not vlan_pairs:
+        if not (vlan_data and all(isinstance(v, list) and len(v) == 2 for v in vlan_data)):
             return "None"
 
-        # expand all ranges then subtract in_use
-        all_allowed = set()
-        for start, end in vlan_pairs:
-            if start <= end:
-                all_allowed.update(range(start, end + 1))
-
-        available = sorted(all_allowed - in_use)
+        available = sorted(
+            set(v for start, end in vlan_data for v in range(int(start), int(end) + 1)) - in_use
+        )
         if not available:
             return "None"
 
-        # collapse into "a-b, c, d-e"
+        # Collapse into "a-b, c, d-e"
         ranges: List[str] = []
         start = end = available[0]
         for vlan in available[1:]:
@@ -209,6 +200,7 @@ def _get_vlan_range(port: Dict[str, Any], vlans_in_use: Dict[str, List[int]]) ->
     except Exception as e:
         print(f"Error extracting VLAN range from port {port.get('id', 'Unknown')}: {e}")
         return "None"
+
 
 def _format_port(port: Dict[str, Any], vlan_usage: Dict[str, List[int]]) -> Dict[str, str]:
     """Formats a port row for output."""
@@ -235,11 +227,11 @@ def _format_port(port: Dict[str, Any], vlan_usage: Dict[str, List[int]]) -> Dict
     }
 
 
-def _get_vlans_in_use(url_env: str = "test") -> Dict[str, List[int]]:
+def _get_vlans_in_use(token: str) -> Dict[str, List[int]]:
     """Aggregates VLANs in use across all active L2VPNs."""
     usage: Dict[str, set] = defaultdict(set)
     try:
-        l2vpns = get_all_l2vpns(url_env, format="json")
+        l2vpns = get_all_l2vpns(token=token, format="json")
         if not l2vpns:
             return {}
 
@@ -261,16 +253,17 @@ def _get_vlans_in_use(url_env: str = "test") -> Dict[str, List[int]]:
 
 
 def get_available_ports(
-        url_env = "test",
-        source = "fabric",
+        token: str,
         search: Optional[str] = None,
         format = "dataframe",  # "dataframe" | "json" | "print"
-        include_down: bool = False,
     ) -> Union[pd.DataFrame, List[dict], None]:
     """
     Lists all customer-facing ports (status=up and not NNI) with VLAN availability.
     """
-    topology = get_topology(url_env)
+    if not token:
+        raise ValueError("Bearer token is required for get_available_ports")
+
+    topology = get_topology(token=token)
 
     # Bubble up topology errors
     if isinstance(topology, dict) and topology.get("status_code"):
@@ -279,14 +272,14 @@ def get_available_ports(
             return None
         return pd.DataFrame() if format == "dataframe" else []
 
-    used_vlans = _get_vlans_in_use(url_env)
+    used_vlans = _get_vlans_in_use(token=token)
 
     # Gather ports
     available_ports: List[dict] = []
     for node in (topology.get("nodes", []) or []):
         for port in (node.get("ports", []) or []):
             try:
-                if i(port.get("status") == "up" or include_down) and not port.get("nni"):
+                if port.get("status") == "up" and not port.get("nni"):
                     available_ports.append(_format_port(port, used_vlans))
             except Exception:
                 continue
@@ -320,4 +313,3 @@ def get_available_ports(
         return pd.DataFrame(available_ports)
 
     return available_ports  # "json"
-

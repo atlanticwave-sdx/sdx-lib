@@ -16,8 +16,8 @@ class SDXClient:
     """Client for interacting with the AtlanticWave-SDX L2VPN API."""
     VERSION = "1.0"
 
-    def __init__(self, url_env: str = "test", source: str = "fabric", logger: Optional[logging.Logger] = None) -> None:
-        self.url = SDXValidator.validate_required_url(BASE_URL, url_env)
+    def __init__(self, source: str = "fabric", logger: Optional[logging.Logger] = None) -> None:
+        self.url = SDXValidator.validate_required_url(BASE_URL)
         self._logger = logger or logging.getLogger(__name__)
         self._request_cache = {}
 
