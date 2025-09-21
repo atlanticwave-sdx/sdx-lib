@@ -2,15 +2,13 @@
 """
 Public API (external methods):
   - get_topology(token: str) -> dict
-  - get_all_l2vpns(token: str, archived: bool = False, format: str = "dataframe", search: str | None = None)
-  - get_available_ports(token: str, search: str | None = None, format: str = "dataframe")
+  - get_all_l2vpns(token: str, archived: bool = False, search: str | None = None)
+  - get_available_ports(token: str, search: str | None = None)
 All other helpers are private (_prefixed).
 """
 import re
 from collections import defaultdict
-from typing import Dict, List, Optional, Any, Union
-
-import pandas as pd
+from typing import Dict, List, Optional, Any
 
 from sdxlib.config import BASE_URL, VERSION
 from sdxlib.exception import SDXException
@@ -51,14 +49,10 @@ def get_topology(token: str) -> Dict[str, Any]:
 def get_all_l2vpns(
         token: str,
         archived: bool = False,
-        format: str  = "dataframe",   # "raw" | "json" | "dataframe"
         search: Optional[str] = None
-    ) -> Union[pd.DataFrame, Dict[str, Dict[str, Any]], List[dict]]:
+    ) -> List[dict]:
     """
     Retrieves all L2VPNs.
-    - format="raw": {service_id: SDXResponse, ...}
-    - format="json": list[dict] friendly for UI/logging
-    - format="dataframe": pandas.DataFrame from friendly list
     """
     if not token:
         raise ValueError("Bearer token is required for get_all_l2vpns")
@@ -75,18 +69,13 @@ def get_all_l2vpns(
             timeout=60,
         )
     if status != 200 or not isinstance(response, dict):
-        # Normalize empties by requested format
-        if format == "raw":
-            return {}
-        if format == "json":
-            return []
-        return pd.DataFrame()
+        return []
 
-    # Convert JSON response to SDXResponse objects
-    l2vpns: Dict[str, SDXResponse] = {
-        service_id: normalize_l2vpn_response(l2vpn_data)
-        for service_id, l2vpn_data in response.items()
-    }
+    # Normalize into dicts keyed by service_id
+    l2vpns: Dict[str, Dict[str, Any]] = {
+            service_id: normalize_l2vpn_response(l2vpn_data)
+            for service_id, l2vpn_data in response.items()
+        }
 
     # Optional search filter
     if search:
@@ -97,29 +86,22 @@ def get_all_l2vpns(
         }
 
     if not l2vpns:
-        if format == "raw":
-            return {}
-        if format == "json":
-            return []
-        return pd.DataFrame()
-
-    if format == "raw":
-        return l2vpns
+        return []
 
     # Friendly list for JSON/DataFrame
     formatted: List[dict] = []
-    for sid, l2vpn in l2vpns.items():
-        eps = []
+    for service_id, l2vpn in l2vpns.items():
+        endpoints_list = []
         for endpoint in (l2vpn.get("endpoints") or []):
             if isinstance(endpoint, dict):
-                eps.append({
+                endpoints_list.append({
                     "port_id": endpoint.get("port_id", "Unknown"),
                     "vlan": endpoint.get("vlan", "Unknown"),
                 })
         formatted.append({
-            "Service ID": sid,
+            "Service ID": service_id,
             "Name": l2vpn.get("name"),
-            "endpoints": eps,
+            "endpoints": endpoints_list,
             "Ownership": l2vpn.get("ownership"),
             "Notifications": ", ".join(
                 (email.get("email") if isinstance(email, dict) else str(email))
@@ -129,8 +111,6 @@ def get_all_l2vpns(
             "QoS Metrics": str(l2vpn.get("qos_metrics") or "None"),
         })
 
-    if format == "dataframe":
-        return pd.DataFrame(formatted)
     return formatted  # "json"
 
 
@@ -230,84 +210,147 @@ def _get_vlans_in_use(token: str) -> Dict[str, List[int]]:
     """Aggregates VLANs in use across all active L2VPNs."""
     usage: Dict[str, set] = defaultdict(set)
     try:
-        l2vpns = get_all_l2vpns(token=token, format="json")
+        l2vpns = get_all_l2vpns(token=token)
         if not l2vpns:
             return {}
 
         # l2vpns is a list of friendly dicts
-        for vpn in l2vpns:
-            for ep in vpn.get("endpoints", []) or []:
-                if not isinstance(ep, dict):
+        for l2vpn_entry in l2vpns:
+            for endpoint in l2vpn_entry.get("endpoints", []) or []:
+                if not isinstance(endpoint, dict):
                     continue
-                port_id = ep.get("port_id")
-                vlan = ep.get("vlan")
+                port_id = endpoint.get("port_id")
+                vlan = endpoint.get("vlan")
                 if port_id and vlan is not None:
-                    for n in _parse_vlan_value(vlan):
-                        usage[port_id].add(n)
+                    for vlan_number in _parse_vlan_value(vlan):
+                        usage[port_id].add(vlan_number)
 
         return {key: sorted(value) for key, value in usage.items()}
     except SDXException as e:
         print(f"Error retrieving VLAN usage: {e}")
         return {}
 
+# ---- helpers (top-level, no nested defs) ----
+
+def _has_non_empty_values(row: dict, columns: List[str]) -> bool:
+    """Return True only if every listed column has a real (non-empty/None/'None') value."""
+    for column_name in columns:
+        value = row.get(column_name)
+        if value is None:
+            return False
+        if isinstance(value, str) and value.strip().lower() in ("", "none"):
+            return False
+    return True
+
+
+def _parse_search_tokens(search: str) -> tuple[List[tuple[str, str]], List[str]]:
+    """Split search into key:value tokens and plain terms."""
+    key_value_terms: List[tuple[str, str]] = []
+    plain_terms: List[str] = []
+    for token in (t for t in search.split() if t):
+        if ":" in token:
+            key, value = token.split(":", 1)
+            key_value_terms.append((key.strip().lower(), value.strip()))
+        else:
+            plain_terms.append(token.lower())
+    return key_value_terms, plain_terms
+
+
+def _row_matches_search(
+    row: dict,
+    key_value_terms: List[tuple[str, str]],
+    plain_terms: List[str],
+    field_map: Dict[str, str],
+) -> bool:
+    """Check if a row satisfies key:value filters and plain-term search."""
+    # key:value filters
+    for key, value in key_value_terms:
+        column_name = field_map.get(key, key)
+        column_text = str(row.get(column_name, "")).lower()
+        if value == "":  # keep only rows where this field is non-empty
+            if not _has_non_empty_values(row, [column_name]):
+                return False
+        else:
+            if value.lower() not in column_text:
+                return False
+
+    # plain terms across common columns
+    if plain_terms:
+        haystacks = (
+            str(row.get("Entities", "")).lower(),
+            str(row.get("Device", "")).lower(),
+            str(row.get("Port ID", "")).lower(),
+        )
+        for term in plain_terms:
+            if not any(term in text for text in haystacks):
+                return False
+
+    return True
+
+
+# ---- main function (single-pass combined filtering + projection) ----
 
 def get_available_ports(
         token: str,
         search: Optional[str] = None,
-        format = "dataframe",  # "dataframe" | "json" | "print"
-    ) -> Union[pd.DataFrame, List[dict], None]:
+        fields: Optional[List[str]] = None,
+    ) -> List[dict]:
     """
     Lists all customer-facing ports (status=up and not NNI) with VLAN availability.
+    Applies, in a single pass:
+      - non-empty check for any requested 'fields'
+      - search filtering (plain terms and key:value tokens)
+      - projection to requested 'fields' (if provided)
     """
     if not token:
         raise ValueError("Bearer token is required for get_available_ports")
 
     topology = get_topology(token=token)
-
-    # Bubble up topology errors
     if isinstance(topology, dict) and topology.get("status_code"):
-        if format == "print":
-            print(f"Topology error: {topology.get('status_code')} {topology.get('response')}")
-            return None
-        return pd.DataFrame() if format == "dataframe" else []
+        return []
 
-    used_vlans = _get_vlans_in_use(token=token)
+    vlans_in_use = _get_vlans_in_use(token=token)
 
-    # Gather ports
-    available_ports: List[dict] = []
+    # Build candidate rows
+    candidate_rows: List[dict] = []
     for node in (topology.get("nodes", []) or []):
         for port in (node.get("ports", []) or []):
             try:
                 if port.get("status") == "up" and not port.get("nni"):
-                    available_ports.append(_format_port(port, used_vlans))
+                    candidate_rows.append(_format_port(port, vlans_in_use))
             except Exception:
                 continue
 
-    # Optional search filter
+    # Prepare combined filtering inputs
+    selected_fields = [name.strip() for name in (fields or []) if name and name.strip()]
+
+    search_field_map = {
+        "entities": "Entities",
+        "device": "Device",
+        "port": "Port",
+        "port_id": "Port ID",
+        "status": "Status",
+        "vlan": "VLANs Available",
+        "vlan_available": "VLANs Available",
+        "vlan_in_use": "VLANs in Use",
+    }
+
+    key_value_terms: List[tuple[str, str]] = []
+    plain_terms: List[str] = []
     if search:
-        n_search = search.lower()
-        available_ports = [
-            port for port in available_ports
-            if n_search in (port.get("Entities") or "").lower()
-            or n_search in (port.get("Device") or "").lower()
-            or n_search in (port.get("Port ID") or "").lower()
-        ]
+        key_value_terms, plain_terms = _parse_search_tokens(search)
 
-    if format == "print":
-        if not available_ports:
-            print(f"No ports found matching search term: '{search}'" if search else "No ports found.")
-            return None
+    # Single-pass filter + project
+    filtered_rows: List[dict] = []
+    for row in candidate_rows:
+        if selected_fields and not _has_non_empty_values(row, selected_fields):
+            continue
+        if search and not _row_matches_search(row, key_value_terms, plain_terms, search_field_map):
+            continue
+        filtered_rows.append(
+            {column_name: row.get(column_name) for column_name in selected_fields}
+            if selected_fields else row
+        )
 
-        headers = ["Domain", "Device", "Port", "Status", "Port ID", "Entities"]
-        col_widths = [12, 12, 10, 8, 50, 50]
-        header_row = " | ".join(f"{h:<{col_widths[i]}}" for i, h in enumerate(headers))
-        sep = "-" * len(header_row)
-        lines = [header_row, sep]
-        for row in available_ports:
-            lines.append(" | ".join(f"{str(row.get(field,'')):<{col_widths[i]}}" for i, field in enumerate(headers)))
-        return "\n".join(lines)
+    return filtered_rows
 
-    if format == "dataframe":
-        return pd.DataFrame(available_ports)
-
-    return available_ports  # "json"
