@@ -14,7 +14,7 @@ import pandas as pd
 
 from sdxlib.config import BASE_URL, VERSION
 from sdxlib.exception import SDXException
-from sdxlib.response import SDXResponse
+from sdxlib.response import normalize_l2vpn_response
 from sdxlib.request import _make_request
 
 def get_topology(token: str) -> Dict[str, Any]:
@@ -40,7 +40,6 @@ def get_topology(token: str) -> Dict[str, Any]:
     )
 
     if status_code != 200:
-        # Pass through structured error from _make_request
         return {"response": response_body, "status_code": status_code}
 
     # Unwrap if the controller returns a list or wraps under {"data": ...}
@@ -54,7 +53,7 @@ def get_all_l2vpns(
         archived: bool = False,
         format: str  = "dataframe",   # "raw" | "json" | "dataframe"
         search: Optional[str] = None
-    ) -> Union[pd.DataFrame, Dict[str, SDXResponse], List[dict]]:
+    ) -> Union[pd.DataFrame, Dict[str, Dict[str, Any]], List[dict]]:
     """
     Retrieves all L2VPNs.
     - format="raw": {service_id: SDXResponse, ...}
@@ -85,16 +84,16 @@ def get_all_l2vpns(
 
     # Convert JSON response to SDXResponse objects
     l2vpns: Dict[str, SDXResponse] = {
-        service_id: SDXResponse(l2vpn_data)
+        service_id: normalize_l2vpn_response(l2vpn_data)
         for service_id, l2vpn_data in response.items()
     }
 
     # Optional search filter
     if search:
-        s = search.lower()
+        n_search = search.lower()
         l2vpns = {
             sid: l2vpn for sid, l2vpn in l2vpns.items()
-            if s in sid.lower() or s in (l2vpn.name or "").lower()
+            if n_search in sid.lower() or n_search in (l2vpn.get("name") or "").lower()
         }
 
     if not l2vpns:
@@ -111,7 +110,7 @@ def get_all_l2vpns(
     formatted: List[dict] = []
     for sid, l2vpn in l2vpns.items():
         eps = []
-        for endpoint in (l2vpn.endpoints or []):
+        for endpoint in (l2vpn.get("endpoints") or []):
             if isinstance(endpoint, dict):
                 eps.append({
                     "port_id": endpoint.get("port_id", "Unknown"),
@@ -119,15 +118,15 @@ def get_all_l2vpns(
                 })
         formatted.append({
             "Service ID": sid,
-            "Name": l2vpn.name,
+            "Name": l2vpn.get("name"),
             "endpoints": eps,
-            "Ownership": getattr(l2vpn, "ownership", None),
+            "Ownership": l2vpn.get("ownership"),
             "Notifications": ", ".join(
-                (e.get("email") if isinstance(e, dict) else str(e))
-                for e in (l2vpn.notifications or [])
-            ) if getattr(l2vpn, "notifications", None) else "None",
-            "Scheduling": str(getattr(l2vpn, "scheduling", None) or "None"),
-            "QoS Metrics": str(getattr(l2vpn, "qos_metrics", None) or "None"),
+                (email.get("email") if isinstance(email, dict) else str(email))
+                for email in (l2vpn.get("notifications") or [])
+            ) if l2vpn.get("notifications") else "None",
+            "Scheduling": str(l2vpn.get("scheduling") or "None"),
+            "QoS Metrics": str(l2vpn.get("qos_metrics") or "None"),
         })
 
     if format == "dataframe":
@@ -135,7 +134,7 @@ def get_all_l2vpns(
     return formatted  # "json"
 
 
-def _parse_vlan_value(v: Any) -> List[int]:
+def _parse_vlan_value(vlan_val: Any) -> List[int]:
     """
     Accepts:
       - int
@@ -144,12 +143,12 @@ def _parse_vlan_value(v: Any) -> List[int]:
       - "100,102,104-106"
     Returns a list of ints (expanded).
     """
-    if isinstance(v, int):
-        return [v]
-    if not isinstance(v, str):
+    if isinstance(vlan_val, int):
+        return [vlan_val]
+    if not isinstance(vlan_val, str):
         return []
 
-    parts = [p.strip() for p in v.split(",")]
+    parts = [part_split.strip() for part_split in vlan_val.split(",")]
     out: List[int] = []
     for part in parts:
         if "-" in part or ":" in part:
@@ -176,11 +175,11 @@ def _get_vlan_range(port: Dict[str, Any], vlans_in_use: Dict[str, List[int]]) ->
         vlan_data = services.get("l2vpn-ptp", {}).get("vlan_range", [])
         in_use = set(vlans_in_use.get(port_id, []))
 
-        if not (vlan_data and all(isinstance(v, list) and len(v) == 2 for v in vlan_data)):
+        if not (vlan_data and all(isinstance(vlan, list) and len(vlan) == 2 for vlan in vlan_data)):
             return "None"
 
         available = sorted(
-            set(v for start, end in vlan_data for v in range(int(start), int(end) + 1)) - in_use
+            set(vlan for start, end in vlan_data for vlan in range(int(start), int(end) + 1)) - in_use
         )
         if not available:
             return "None"
@@ -208,12 +207,12 @@ def _format_port(port: Dict[str, Any], vlan_usage: Dict[str, List[int]]) -> Dict
 
     # Parse URN: urn:sdx:port:<domain>:<device>:<port>
     domain = device = port_number = "Unknown"
-    m = re.match(r"urn:sdx:port:(.*?):(.*?):(.*?)$", port_id or "")
-    if m:
-        domain, device, port_number = m.groups()
+    match = re.match(r"urn:sdx:port:(.*?):(.*?):(.*?)$", port_id or "")
+    if match:
+        domain, device, port_number = match.groups()
 
     entities = port.get("entities") or []
-    entities_str = ", ".join(str(e) for e in entities)
+    entities_str = ", ".join(str(entity) for entity in entities)
 
     return {
         "Domain": domain,
@@ -246,7 +245,7 @@ def _get_vlans_in_use(token: str) -> Dict[str, List[int]]:
                     for n in _parse_vlan_value(vlan):
                         usage[port_id].add(n)
 
-        return {k: sorted(v) for k, v in usage.items()}
+        return {key: sorted(value) for key, value in usage.items()}
     except SDXException as e:
         print(f"Error retrieving VLAN usage: {e}")
         return {}
@@ -286,12 +285,12 @@ def get_available_ports(
 
     # Optional search filter
     if search:
-        s = search.lower()
+        n_search = search.lower()
         available_ports = [
-            p for p in available_ports
-            if s in (p.get("Entities") or "").lower()
-            or s in (p.get("Device") or "").lower()
-            or s in (p.get("Port ID") or "").lower()
+            port for port in available_ports
+            if n_search in (port.get("Entities") or "").lower()
+            or n_search in (port.get("Device") or "").lower()
+            or n_search in (port.get("Port ID") or "").lower()
         ]
 
     if format == "print":
@@ -303,11 +302,10 @@ def get_available_ports(
         col_widths = [12, 12, 10, 8, 50, 50]
         header_row = " | ".join(f"{h:<{col_widths[i]}}" for i, h in enumerate(headers))
         sep = "-" * len(header_row)
-        print(header_row)
-        print(sep)
-        for p in available_ports:
-            print(" | ".join(f"{str(p.get(field,'')):<{col_widths[i]}}" for i, field in enumerate(headers)))
-        return None
+        lines = [header_row, sep]
+        for row in available_ports:
+            lines.append(" | ".join(f"{str(row.get(field,'')):<{col_widths[i]}}" for i, field in enumerate(headers)))
+        return "\n".join(lines)
 
     if format == "dataframe":
         return pd.DataFrame(available_ports)
