@@ -1,8 +1,14 @@
+# sdxlib/__init__.py
 """
-sdxlib
-
-A Python client library for interacting with the AtlanticWave-SDX L2VPN API.
-
-Run from the parent SDXLIB directory using:
-    python -m unittest discover -v tests
+AtlanticWave-SDX Python Library
+(Use explicit submodule imports, e.g.:
+ from sdxlib.topology_utils import get_topology, get_available_ports, get_all_l2vpns
+ from sdxlib.l2vpn import get_l2vpn, create_l2vpn, update_l2vpn, delete_l2vpn
+)
 """
+__version__ = "1.0.0"
+
+__all__ = [
+    # Intentionally empty of heavy symbols; import from submodules directly.
+]
+
