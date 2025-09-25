@@ -354,3 +354,73 @@ def get_available_ports(
 
     return filtered_rows
 
+def get_device_info(
+    token: str,
+    device: str,
+    port_id: Optional[str] = None,
+    fields: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+    """
+    Return device metadata and its ports (formatted like available_ports).
+    fields: optional projection list for each port dict.
+    """
+    if not token:
+        raise ValueError("Bearer token is required for get_device_info")
+    if not device or not isinstance(device, str):
+        raise ValueError("device must be a non-empty string")
+
+    topology = get_topology(token=token)
+    if isinstance(topology, dict) and topology.get("status_code"):
+        return {"device": None, "columns": [], "ports": []}
+
+    vlan_usage = _get_vlans_in_use(token=token)
+
+    matched_node = None
+    for node in (topology.get("nodes", []) or []):
+        node_name = node.get("name") or ""
+        node_id = node.get("id") or ""
+        if device in {node_name, node_id}:
+            matched_node = node
+            break
+        for port in (node.get("ports", []) or []):
+            urn = (port.get("id") or "")
+            match = re.match(r"urn:sdx:port:(.*?):(.*?):(.*?)$", urn)
+            if match and match.groups()[1] == device:
+                matched_node = node
+                break
+        if matched_node:
+            break
+
+    if not matched_node:
+        return {"device": None, "columns": [], "ports": []}
+
+    port_rows: List[dict] = []
+    for port in (matched_node.get("ports", []) or []):
+        try:
+            formatted = _format_port(port, vlan_usage)
+            if port_id and formatted.get("Port ID") != port_id:
+                continue
+            port_rows.append(formatted)
+        except Exception:
+            continue
+
+    selected_fields = [name.strip() for name in (fields or []) if name and name.strip()]
+    if selected_fields:
+        port_rows = [
+            {column_name: row.get(column_name) for column_name in selected_fields}
+            for row in port_rows
+        ]
+
+    columns = selected_fields or [
+        "Domain", "Device", "Port", "Status", "Port ID", "Entities", "VLANs Available", "VLANs in Use"
+    ]
+
+    device_meta = {
+        "name": matched_node.get("name"),
+        "id": matched_node.get("id"),
+        "status": matched_node.get("status"),
+        "domain": port_rows[0].get("Domain") if port_rows else None,
+    }
+
+    return {"device": device_meta, "columns": columns, "ports": port_rows}
+
