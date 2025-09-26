@@ -4,6 +4,8 @@ Public API (external methods):
   - get_topology(token: str) -> dict
   - get_all_l2vpns(token: str, archived: bool = False, search: str | None = None)
   - get_available_ports(token: str, search: str | None = None)
+  - get_port_vlans_available(token: str, port_id: str) -> dict | None
+  - get_all_vlans_available(token: str) -> list[dict]
 All other helpers are private (_prefixed).
 """
 import re
@@ -14,6 +16,7 @@ from sdxlib.config import BASE_URL, VERSION
 from sdxlib.exception import SDXException
 from sdxlib.response import normalize_l2vpn_response
 from sdxlib.request import _make_request
+
 
 def get_topology(token: str) -> Dict[str, Any]:
     """
@@ -45,6 +48,7 @@ def get_topology(token: str) -> Dict[str, Any]:
         return response_body["data"]
 
     return response_body or {}
+
 
 def get_all_l2vpns(
         token: str,
@@ -147,34 +151,78 @@ def _parse_vlan_value(vlan_val: Any) -> List[int]:
     return out
 
 
+# --- helpers for advertised ranges (strings or [start,end]) ---
+
+def _iter_advertised_vlan_ints(raw_ranges: Any) -> List[int]:
+    """
+    Normalize and expand controller-advertised VLAN ranges into a list of ints.
+    Accepts:
+      - [[start, end], ...]  (canonical)
+      - ["start-end", ...] or ["start:end", ...]  (string form)
+    """
+    if not raw_ranges:
+        return []
+    expanded: List[int] = []
+    for item in raw_ranges:
+        # canonical pair
+        if isinstance(item, list) and len(item) == 2:
+            try:
+                a, b = int(item[0]), int(item[1])
+            except Exception:
+                continue
+            if a <= b:
+                expanded.extend(range(a, b + 1))
+            continue
+        # "a-b" or "a:b"
+        if isinstance(item, str):
+            text = item.strip().replace(" ", "")
+            sep = "-" if "-" in text else (":" if ":" in text else None)
+            if not sep:
+                continue
+            try:
+                a, b = map(int, text.split(sep))
+            except Exception:
+                continue
+            if a <= b:
+                expanded.extend(range(a, b + 1))
+            continue
+    return expanded
+
+
+def _collapse_ints_to_ranges(values: List[int]) -> str:
+    """Collapse sorted ints into 'a-b, c, d-e' string (or 'None' if empty)."""
+    if not values:
+        return "None"
+    values = sorted(set(values))
+    out: List[str] = []
+    start = end = values[0]
+    for v in values[1:]:
+        if v == end + 1:
+            end = v
+        else:
+            out.append(f"{start}-{end}" if start != end else str(start))
+            start = end = v
+    out.append(f"{start}-{end}" if start != end else str(start))
+    return ", ".join(out)
+
+
 def _get_vlan_range(port: Dict[str, Any], vlans_in_use: Dict[str, List[int]]) -> str:
     """Compute available VLAN ranges on a port (excluding vlans_in_use)."""
     try:
         port_id = port.get("id", "Unknown")
         services = port.get("services", {}) or {}
-        vlan_data = services.get("l2vpn-ptp", {}).get("vlan_range", [])
+
+        # accept both hyphen and underscore keys
+        svc = services.get("l2vpn-ptp") or services.get("l2vpn_ptp") or {}
+        raw_ranges = svc.get("vlan_range", [])
+
+        advertised = _iter_advertised_vlan_ints(raw_ranges)
+        if not advertised:
+            return "None"
+
         in_use = set(vlans_in_use.get(port_id, []))
-
-        if not (vlan_data and all(isinstance(vlan, list) and len(vlan) == 2 for vlan in vlan_data)):
-            return "None"
-
-        available = sorted(
-            set(vlan for start, end in vlan_data for vlan in range(int(start), int(end) + 1)) - in_use
-        )
-        if not available:
-            return "None"
-
-        # Collapse into "a-b, c, d-e"
-        ranges: List[str] = []
-        start = end = available[0]
-        for vlan in available[1:]:
-            if vlan == end + 1:
-                end = vlan
-            else:
-                ranges.append(f"{start}-{end}" if start != end else str(start))
-                start = end = vlan
-        ranges.append(f"{start}-{end}" if start != end else str(start))
-        return ", ".join(ranges)
+        available = sorted(set(advertised) - in_use)
+        return _collapse_ints_to_ranges(available)
 
     except Exception as e:
         print(f"Error extracting VLAN range from port {port.get('id', 'Unknown')}: {e}")
@@ -354,6 +402,7 @@ def get_available_ports(
 
     return filtered_rows
 
+
 def get_device_info(
     token: str,
     device: str,
@@ -423,4 +472,91 @@ def get_device_info(
     }
 
     return {"device": device_meta, "columns": columns, "ports": port_rows}
+
+
+# ---- NEW: VLAN availability helpers ----
+
+def _normalize_vlan_list_string(ranges_text: str) -> List[str]:
+    """
+    Convert a human string like '100-120, 200, 300-305' → ['100-120','200','300-305'].
+    Returns [] for None/empty/'None'.
+    """
+    if not isinstance(ranges_text, str):
+        return []
+    text = ranges_text.strip()
+    if not text or text.lower() == "none":
+        return []
+    return [part.strip() for part in text.split(",") if part.strip()]
+
+
+def get_port_vlans_available(token: str, port_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Return VLAN availability (as compact ranges) for a single port URN.
+    Uses the same availability computation as get_available_ports:
+      - derives 'vlan_range' from topology
+      - subtracts VLANs currently in use by active L2VPNs
+    Output:
+      {"port_id": "<urn>", "vlans_available": ["100-200","300",...]}  or  None if not found
+    """
+    if not token:
+        raise ValueError("Bearer token is required for get_port_vlans_available")
+    if not port_id or not isinstance(port_id, str):
+        raise ValueError("port_id must be a non-empty string")
+
+    topology = get_topology(token=token)
+    if isinstance(topology, dict) and topology.get("status_code"):
+        return None
+
+    vlan_usage = _get_vlans_in_use(token=token)
+
+    target_port: Optional[Dict[str, Any]] = None
+    for node in (topology.get("nodes", []) or []):
+        for port in (node.get("ports", []) or []):
+            if str(port.get("id") or "") == port_id:
+                target_port = port
+                break
+        if target_port:
+            break
+
+    if not target_port:
+        return None
+
+    ranges_text = _get_vlan_range(target_port, vlan_usage)  # 'a-b, c, d-e' or 'None'
+    return {
+        "port_id": port_id,
+        "vlans_available": _normalize_vlan_list_string(ranges_text),
+    }
+
+
+def get_all_vlans_available(token: str) -> List[Dict[str, Any]]:
+    """
+    Return VLAN availability for all ports as a list of:
+      {"port_id": "<urn>", "vlans_available": ["100-200","300",...]}
+    Uses the same logic as get_available_ports (subtract in-use VLANs).
+    """
+    if not token:
+        raise ValueError("Bearer token is required for get_all_vlans_available")
+
+    topology = get_topology(token=token)
+    if isinstance(topology, dict) and topology.get("status_code"):
+        return []
+
+    vlan_usage = _get_vlans_in_use(token=token)
+
+    results: List[Dict[str, Any]] = []
+    for node in (topology.get("nodes", []) or []):
+        for port in (node.get("ports", []) or []):
+            try:
+                port_urn = str(port.get("id") or "")
+                if not port_urn:
+                    continue
+                ranges_text = _get_vlan_range(port, vlan_usage)
+                results.append({
+                    "port_id": port_urn,
+                    "vlans_available": _normalize_vlan_list_string(ranges_text),
+                })
+            except Exception:
+                continue
+
+    return results
 
