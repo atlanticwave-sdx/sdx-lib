@@ -2,6 +2,7 @@
 from typing import Dict, Any, List
 from sdxlib.request import _make_request
 from sdxlib.config import BASE_URL
+from sdxlib.response import normalize_result
 
 VERSION = "1.0"
 
@@ -15,7 +16,7 @@ def create_l2vpn(token: str, name: str, endpoints: List[Dict[str, str]], **kwarg
         extra_headers={"Authorization": f"Bearer {token}"},
         operation="create L2VPN",
     )
-    return {"status_code": status, "data": response, "error": None if status == 200 else str(response)}
+    return normalize_result(response, status, "create L2VPN")
 
 
 def update_l2vpn(token: str, service_id: str, **fields) -> dict:
@@ -27,7 +28,7 @@ def update_l2vpn(token: str, service_id: str, **fields) -> dict:
         extra_headers={"Authorization": f"Bearer {token}"},
         operation="update L2VPN",
     )
-    return {"status_code": status, "data": response, "error": None if status == 200 else str(response)}
+    return normalize_result(response, status, "update L2VPN")
 
 
 def delete_l2vpn(token: str, service_id: str) -> dict:
@@ -38,7 +39,7 @@ def delete_l2vpn(token: str, service_id: str) -> dict:
         extra_headers={"Authorization": f"Bearer {token}"},
         operation="delete L2VPN",
     )
-    return {"status_code": status, "data": response, "error": None if status == 200 else str(response)}
+    return normalize_result(response, status, "delete L2VPN")
 
 
 def get_l2vpn(token: str, service_id: str) -> Dict[str, Any]:
@@ -49,7 +50,5 @@ def get_l2vpn(token: str, service_id: str) -> Dict[str, Any]:
         extra_headers={"Authorization": f"Bearer {token}"},
         operation="get L2VPN",
     )
-    if status != 200 or not isinstance(response, dict):
-        return {"status_code": status, "error": "Failed to retrieve L2VPN", "data": response}
-    return response
+    return normalize_result(response, status, "get L2VPN")
 
