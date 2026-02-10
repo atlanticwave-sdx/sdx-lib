@@ -3,10 +3,13 @@ from typing import Dict, Any, List
 from sdxlib.request import _make_request
 from sdxlib.config import BASE_URL
 from sdxlib.response import normalize_result
+from sdxlib.validator import validate_l2vpn_endpoints
 
 VERSION = "1.0"
 
 def create_l2vpn(token: str, name: str, endpoints: List[Dict[str, str]], **kwargs) -> dict:
+    validate_l2vpn_endpoints(endpoints)
+    
     url = f"{BASE_URL}/l2vpn/{VERSION}"
     payload = {"name": name, "endpoints": endpoints, **kwargs}
     response, status = _make_request(

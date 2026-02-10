@@ -4,9 +4,11 @@ from sdxlib.validator import (
     validate_name,
     is_valid_email,
     validate_notifications,
-    map_http_error
+    map_http_error,
+    validate_l2vpn_endpoints
 )
 from unittest.mock import MagicMock
+from sdxlib.exception import SDXException
 
 def test_validate_required_url_ok():
     assert validate_required_url("https://example.com") == "https://example.com"
@@ -104,3 +106,45 @@ def test_map_http_error_text():
     assert result["status_code"] == 500
     assert result["message"] == "Unknown error"
     assert result["details"] == "Server error"
+
+def test_validate_endpoints_all_unsupported():
+    endpoints = [{"port_id": "p1", "vlan": "all"}, {"port_id": "p2", "vlan": "all"}]
+    with pytest.raises(ValueError, match=r"'all' .* not supported"):
+        validate_l2vpn_endpoints(endpoints)
+
+from typing import List, Dict, Any
+
+# Helper to create minimal endpoint dictionaries
+def create_endpoint(port_suffix: str, vlan: str | int) -> Dict[str, Any]:
+    return {"port_id": f"urn:sdx:port:{port_suffix}", "vlan": vlan}
+
+@pytest.mark.parametrize(
+    "vlan_a, vlan_b",
+    [
+        ("123", "123"),
+        ("any", "any"),
+        ("untagged", "untagged"),
+    ],
+    ids=["explicit_same", "any_any", "untagged_untagged"]
+)
+def test_l2vpn_valid_vlan_combinations(vlan_a, vlan_b):
+    endpoints = [create_endpoint("A", vlan_a), create_endpoint("B", vlan_b)]
+    validate_l2vpn_endpoints(endpoints)  # passes = success
+
+@pytest.mark.parametrize(
+    "vlan_a, vlan_b, expected_part",
+    [
+        ("any",     "100",   "mix|inconsistent|any"),
+        ("untagged", "any",  "mix|inconsistent|untagged|any"),
+        ("all",      "all",   "'all' is not supported|all is not supported"),
+        ("all",      "200",   "'all' is not supported|all is not supported"),
+    ],
+    ids=["any_explicit", "untagged_any", "all_all", "all_explicit"]
+)
+def test_l2vpn_invalid_vlan_combinations(vlan_a, vlan_b, expected_part):
+    endpoints = [create_endpoint("A", vlan_a), create_endpoint("B", vlan_b)]
+    with pytest.raises(ValueError) as exc:
+        validate_l2vpn_endpoints(endpoints)
+    msg = str(exc.value).lower()
+    assert any(p in msg for p in expected_part.split("|")), \
+        f"Expected {expected_part!r} in error, got: {msg}"
