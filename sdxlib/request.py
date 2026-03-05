@@ -28,11 +28,13 @@ def _make_request(
         headers.update(extra_headers)
 
     try:
-        resp = requests.request(method, url, json=payload, headers=headers, timeout=timeout)
+        # ADDED verify=False to bypass the internal SSL 'bad certificate' error
+        resp = requests.request(method, url, json=payload, headers=headers, timeout=timeout, verify=False)
     except Timeout:
         return {"status_code": 408, "error": "Request timeout", "operation": operation, "url": url}, 408
     except RequestException as e:
-        return {"status_code": 0, "error": str(e), "operation": operation, "url": url}, 0
+        # CHANGED 0 to 502 (Bad Gateway) to prevent Flask/curl from crashing!
+        return {"status_code": 502, "error": str(e), "operation": operation, "url": url}, 502
 
     status = resp.status_code
     ctype = (resp.headers.get("Content-Type") or "").lower()
