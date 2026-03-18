@@ -18,25 +18,21 @@ from sdxlib.response import normalize_l2vpn_response
 from sdxlib.request import _make_request
 
 
-def get_topology(token: str) -> Dict[str, Any]:
+def get_topology() -> Dict[str, Any]:
     """
     Fetch topology via NGINX (/production):
-      - GET {BASE_URL}/topology with the Bearer token (validated by Lua)
+      - GET {BASE_URL}/topology (Bearer token was removed)
       - On success: return the RAW topology dict (if API wraps, unwrap 'data')
       - On error:   return {"response": <payload>, "status_code": <code>}
     """
-    if not token:
-        raise ValueError("Bearer token is required for get_topology")
 
     topology_url = f"{BASE_URL}/topology"
-    extra_headers = {"Authorization": f"Bearer {token}"}
 
     response_body, status_code = _make_request(
         method="GET",
         url=topology_url,
         payload=None,
         operation="get topology",
-        extra_headers=extra_headers,
         timeout=60,
     )
 
