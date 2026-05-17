@@ -115,3 +115,61 @@ def map_http_error(
         "details": details,
     }
 
+from typing import List, Dict, Any
+from sdxlib.exception import SDXException 
+
+SPECIAL_VLAN_KEYWORDS = {"any", "untagged"}
+
+def validate_l2vpn_endpoints(endpoints: List[Dict[str, Any]]) -> None:
+    """
+    Validates L2VPN endpoints according to issue #496 rules.
+    - Rejects 'all'
+    - Enforces consistency for 'any' or 'untagged'
+    - Prevents mixing special keywords with explicit VLANs
+    """
+    if not endpoints or len(endpoints) < 2:
+        raise ValueError("At least two endpoints are required to create an L2VPN.")
+
+    vlans = []
+    for ep in endpoints:
+        if "vlan" not in ep:
+            raise ValueError("Each endpoint must have the 'vlan' key.")
+
+        vlan = ep["vlan"]
+        if isinstance(vlan, str):
+            vlan = vlan.strip().lower()
+        elif not isinstance(vlan, (int, str)):
+            raise ValueError(f"Invalid VLAN value: {vlan}. Must be string or integer.")
+
+        vlans.append(vlan)
+
+    # Reject 'all'
+    if any(v == "all" for v in vlans):
+        raise ValueError(
+            "The VLAN value 'all' is not supported. Use an explicit VLAN ID (e.g., '123') or 'any'/'untagged' consistently across all endpoints."
+        )
+
+    used_special = {v for v in vlans if v in SPECIAL_VLAN_KEYWORDS}
+
+    if len(used_special) > 1:
+        raise ValueError(
+            "Inconsistent special VLAN keywords. "
+            "All endpoints must use the same keyword ('any' or 'untagged')."
+        )
+
+    if used_special:
+        keyword = next(iter(used_special))
+        if any(v not in SPECIAL_VLAN_KEYWORDS for v in vlans):
+            raise ValueError(
+                f"Cannot mix special keyword '{keyword}' with explicit VLAN IDs. "
+                "All endpoints must use the same special keyword."
+            )
+    else:
+        # Optional: validate numeric VLANs
+        for v in vlans:
+            try:
+                vlan_id = int(v)
+                if not (1 <= vlan_id <= 4094):
+                    raise ValueError(f"VLAN ID out of range: {v}. Must be 1–4094.")
+            except ValueError:
+                raise ValueError(f"Invalid VLAN value: {v}. Must be an integer.")
